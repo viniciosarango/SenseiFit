@@ -1,0 +1,201 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Control de Acceso</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background:
+                linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)),
+                url("{% static 'img/gym_bg.jpg' %}") no-repeat center center fixed;
+            background-size: cover;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 44px;
+            margin-bottom: 10px;
+        }
+
+        h2 {
+            font-size: 28px;
+            margin: 10px 0;
+        }
+
+        .box {
+            text-align: center;
+            padding: 50px 60px;
+            border-radius: 22px;
+            width: 540px;
+            background: rgba(0, 160, 80, 0.9); /* TRANSPARENCIA REAL */
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            transition: background 0.3s ease;
+        }
+
+        /* SEMÁFORO */
+        .ok     { background: rgba(10, 165, 90, 0.90); }
+        .warn   { background: rgba(201, 178, 0, 0.90); }
+        .orange { background: rgba(255, 106, 0, 0.92); }
+        .fail   { background: rgba(170, 0, 0, 0.92); }
+
+        img {
+            width: 170px;
+            height: 170px;
+            border-radius: 50%;
+            border: 4px solid #fff;
+            margin: 25px 0;
+            object-fit: cover;
+        }
+
+        .client-name {
+            font-size: 36px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .status {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+
+        .plan {
+            font-size: 20px;
+            opacity: 0.95;
+        }
+
+        .small {
+            font-size: 18px;
+            opacity: 0.9;
+            margin-top: 6px;
+        }
+
+        /* SIMULADOR */
+        .simulator {
+            margin-top: 35px;
+            opacity: 0.6;
+        }
+
+        .simulator input,
+        .simulator button {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="box" id="box">
+    <h1>DORIANS GYM</h1>
+    
+
+    <div id="content"></div>
+
+    <div class="simulator">
+        <input type="number" id="clientId" placeholder="Simular Client ID">
+        <button onclick="simulate()">Simular huella</button>
+    </div>
+</div>
+
+<script>
+let lastAttendanceId = null;
+
+function simulate() {
+    const clientId = document.getElementById("clientId").value;
+    if (!clientId) return;
+
+    fetch("/attendance/webhook/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            hikvision_id: clientId.toString(),
+            method: "MANUAL",
+            source: "screen_test"
+        })
+    });
+}
+
+// POLLING
+setInterval(() => {
+    fetch("/api/attendance/last/")
+        .then(res => res.json())
+        .then(data => {
+            if (!data.has_data) return;
+            if (data.attendance_id === lastAttendanceId) return;
+
+            lastAttendanceId = data.attendance_id;
+
+            const box = document.getElementById("box");
+            const content = document.getElementById("content");
+
+            box.className = "box";
+            box.classList.remove("ok", "warn", "orange", "fail");
+
+            if (data.color === "green") box.classList.add("ok");
+            if (data.color === "yellow") box.classList.add("warn");
+            if (data.color === "orange") box.classList.add("orange");
+            if (data.color === "red") box.classList.add("fail");
+
+            let daysText = "";
+            if (data.days_left !== null && data.days_left !== undefined) {
+                if (data.days_left < 0) {
+                    daysText = "❌ Membresía vencida";
+                } else if (data.days_left === 0) {
+                    daysText = "⚠️ Último día de acceso";
+                } else {
+                    daysText = `Te quedan ${data.days_left} día(s)`;
+                }
+            }
+
+            // 🎯 2. NUEVA Lógica para Planes de Sesiones
+            let sessionsText = "";
+            if (data.plan_kind === "SESSIONS") {
+                // Si es de sesiones, reemplazamos el texto de días por el de tickets
+                sessionsText = `<div class="status" style="font-size: 48px; background: rgba(255,255,255,0.2); border-radius: 15px; padding: 10px; margin: 10px 0;">
+                                    🎟️ ${data.remaining_sessions} <span style="font-size: 20px;">disponibles</span>
+                                </div>`;
+                daysText = ""; // Ocultamos el texto de días si es por sesiones
+            }
+
+            const checkIn = new Date(data.check_in_time).toLocaleString("es-EC", {
+                dateStyle: "short",
+                timeStyle: "medium"
+            });
+
+
+            const photo = data.photo_url
+                ? `<img src="${data.photo_url}">`
+                : `<img src="https://via.placeholder.com/170">`;
+
+            content.innerHTML = `
+                ${photo}
+                <div class="client-name">${data.client}</div>
+                <div class="plan">Plan: ${data.plan}</div>
+                <div class="status">${data.message}</div>
+                <div class="small">${daysText}</div>
+                <div class="small">
+                    Vigencia: ${data.start_date} → ${data.end_date}
+                </div>
+                <div class="small">
+                    Ingreso: ${checkIn}
+                </div>
+
+            `;
+        })
+        .catch(() => {});
+}, 1000);
+</script>
+
+</body>
+</html>
