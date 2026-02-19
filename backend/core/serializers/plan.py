@@ -1,9 +1,14 @@
 from rest_framework import serializers
-from core.models import Plan
+from core.models import Plan, Gym
 
 class PlanSerializer(serializers.ModelSerializer):
 
     gym_name = serializers.CharField(source='gym.name', read_only=True)
+
+    # gym = serializers.PrimaryKeyRelatedField(
+    #     queryset=Gym.objects.all(),
+    #     required=False
+    # )
 
 
     plan_type = serializers.ChoiceField(
@@ -27,7 +32,11 @@ class PlanSerializer(serializers.ModelSerializer):
             'total_sessions',
         ]
         
-        read_only_fields = ['id', 'gym_name', 'gym', 'created_at']
+        read_only_fields = ['id', 'gym_name', 'created_at']
+
+        # extra_kwargs = {
+        #     'gym': {'required': False}
+        # }
 
 
     def validate_code(self, value):
@@ -78,6 +87,8 @@ class PlanSerializer(serializers.ModelSerializer):
             )
 
         return data
+    
+    
     
 
 
