@@ -23,44 +23,97 @@ class ClientViewSet(CompanyGymScopedViewSet):
     @method_decorator(ensure_csrf_cookie)
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
+    
+    def get_queryset(self):
+        user = self.request.user
 
+        if user.is_superuser:
+            return Client.objects.filter(is_active=True)
+
+        if user.role == user.Roles.ADMIN:
+            return Client.objects.filter(
+                company=user.company,
+                is_active=True
+            )
+
+        if user.role == user.Roles.STAFF:
+            return Client.objects.filter(
+                is_active=True,
+                gym_links__gym=user.gym
+            ).distinct()
+
+        return Client.objects.none()
+
+    
+    
     def create(self, request, *args, **kwargs):
         data = request.data
         user = request.user
+        
+        if not (user.is_superuser or user.role in [user.Roles.ADMIN, user.Roles.STAFF]):
+            return Response({"detail": "No tienes permiso para crear clientes."}, status=403)
 
-        # 🔒 Determinar gym de forma profesional y segura
+        # 🔥 Determinar empresa y gym según rol
         if user.is_superuser:
+            company_id = data.get("company")
+            gym_id = data.get("gym")
+
+            if not company_id:
+                return Response({"detail": "Debe especificar la empresa."}, status=400)
+
+            if not gym_id:
+                return Response({"detail": "Debe especificar el gimnasio."}, status=400)
+
+            from core.models import Company, Gym
+
+            try:
+                company = Company.objects.get(id=company_id)
+            except Company.DoesNotExist:
+                return Response({"detail": "Empresa inválida."}, status=400)
+
+            try:
+                gym = Gym.objects.get(id=gym_id, company=company)
+            except Gym.DoesNotExist:
+                return Response({"detail": "Gimnasio inválido para esta empresa."}, status=400)
+
+        elif user.role == user.Roles.ADMIN:
+            company = user.company
+
             gym_id = data.get("gym")
             if not gym_id:
-                return Response(
-                    {"detail": "Debe especificar el gym."},
-                    status=400
-                )
+                return Response({"detail": "Debe especificar el gimnasio."}, status=400)
+
+            from core.models import Gym
             try:
-                gym = Gym.objects.get(id=gym_id)
+                gym = Gym.objects.get(id=gym_id, company=company)
             except Gym.DoesNotExist:
-                return Response(
-                    {"detail": "Gym inválido."},
-                    status=400
-                )
-        else:
-            if not user.gym:
-                return Response(
-                    {"detail": "El usuario no tiene un gimnasio asignado."},
-                    status=400
-                )
+                return Response({"detail": "Gimnasio inválido."}, status=400)
+
+        elif user.role == user.Roles.STAFF:
+            company = user.company
             gym = user.gym
 
+        else:
+            return Response({"detail": "No tienes permiso para crear clientes."}, status=403)
+
+        # 🔥 Crear cliente
         try:
-            client, created_user, temp_password = create_client_with_user_service(
+
+            # 🔥 Validar primero con serializer
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
+            # 🔥 Luego crear cliente
+            client, _, _ = create_client_with_user_service(
+                company=company,
                 gym=gym,
-                first_name=data.get("first_name"),
-                last_name=data.get("last_name"),
-                id_number=data.get("id_number"),
-                phone=data.get("phone"),
-                email=data.get("email"),
-                birth_date=data.get("birth_date") or None,
-                gender=data.get("gender") or None,
+                first_name=serializer.validated_data.get("first_name"),
+                last_name=serializer.validated_data.get("last_name"),
+                id_number=serializer.validated_data.get("id_number"),
+                phone=serializer.validated_data.get("phone"),
+                email=serializer.validated_data.get("email"),
+                birth_date=serializer.validated_data.get("birth_date"),
+                gender=serializer.validated_data.get("gender"),
             )
 
             if data.get("hikvision_id"):
@@ -70,19 +123,36 @@ class ClientViewSet(CompanyGymScopedViewSet):
                 client.photo = request.FILES['photo']
 
             client.save()
-
             serializer = self.get_serializer(client)
             return Response(serializer.data, status=201)
 
         except ClientOnboardingError as e:
             return Response({"detail": str(e)}, status=400)
+        
 
-        except Exception as e:
-            print(f"DEBUG ERROR en ClientViewSet: {str(e)}")
-            return Response(
-                {"detail": f"DEBUG: {str(e)}"},
-                status=500
-            )
+    def update(self, request, *args, **kwargs):
+        user = request.user
+        client = self.get_object()
+
+        # 🔒 Superuser puede todo
+        if user.is_superuser:
+            return super().update(request, *args, **kwargs)
+
+        # 🔒 Admin solo clientes de su company
+        if user.role == user.Roles.ADMIN:
+            if client.company_id != user.company_id:
+                return Response({"detail": "No autorizado."}, status=403)
+            return super().update(request, *args, **kwargs)
+
+        # 🔒 Staff solo clientes de su gym
+        if user.role == user.Roles.STAFF:
+            if not client.gym_links.filter(gym=user.gym).exists():
+                return Response({"detail": "No autorizado."}, status=403)
+            return super().update(request, *args, **kwargs)
+
+        return Response({"detail": "No autorizado."}, status=403)
+
+
 
     @action(detail=False, methods=['get', 'patch'], permission_classes=[IsAuthenticated])
     def me(self, request):
@@ -108,3 +178,23 @@ class ClientViewSet(CompanyGymScopedViewSet):
 
         serializer = ClientPortalSerializer(client)
         return Response(serializer.data)
+    
+
+
+    def destroy(self, request, *args, **kwargs):
+        user = request.user
+        client = self.get_object()
+
+        # Permisos
+        if not (
+            user.is_superuser or
+            (user.role == user.Roles.ADMIN and client.company_id == user.company_id) or
+            (user.role == user.Roles.STAFF and client.gym_links.filter(gym=user.gym).exists())
+        ):
+            return Response({"detail": "No autorizado."}, status=403)
+
+        client.is_active = False
+        client.save()
+
+        return Response({"detail": "Cliente desactivado correctamente."})
+

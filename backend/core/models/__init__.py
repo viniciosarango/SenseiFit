@@ -8,9 +8,9 @@ from .membership import Membership
 from .payment import Payment
 from .courtesy import CourtesyPass
 from .scheduling import Service, GymClass, Reservation
-from .product import Product      # 👈 Separado
-from .inventory import Inventory  # 👈 Separado
-from .sale import Sale            # 👈 Separado
+from .product import Product      
+from .inventory import Inventory  
+from .sale import Sale            
 from .attendance import Attendance
 from .address import Address
 from .branch import Branch
@@ -19,11 +19,13 @@ from .finances import Expense, Income
 from .access import AccessToken, AccessLog
 from .notifications import NotificationTemplate, Notification
 from .payment_method import PaymentMethod
+from .client_gym import ClientGym
 
 
 
 __all__ = [
     'Company',
+    'ClientGym',
     'Gym',
     'User',
     'Client',

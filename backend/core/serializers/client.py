@@ -1,4 +1,5 @@
 import phonenumbers
+from django.core.exceptions import ValidationError
 from rest_framework import serializers
 from core.models.client import Client
 from core.models.membership import Membership
@@ -10,21 +11,38 @@ class ClientSerializer(serializers.ModelSerializer):
     photo = serializers.ImageField(required=False, allow_null=True)
     photo_url = serializers.SerializerMethodField()
 
-    gym_name = serializers.ReadOnlyField(source='gym.name')
 
     
     class Meta:
         model = Client
+        
         fields = [
-            'id', 'id_number', 'hikvision_id', 'first_name', 'last_name', 
-            'full_name', 'email', 'phone', 'birth_date', 'gender', 
-            'photo', 'photo_url', 'membership_info', 'created_at', 'gym_name',
+            'id',
+            'country',
+            'document_type',
+            'id_number',
+            'hikvision_id',
+            'first_name',
+            'last_name',
+            'full_name',
+            'email',
+            'phone',
+            'birth_date',
+            'gender',
+            'photo',
+            'photo_url',
+            'membership_info',
+            'created_at',
         ]
+        
         read_only_fields = [
             'id',
             'membership_info',
             'created_at',
+            'company',
+            'user',
         ]
+        
         extra_kwargs = {
             'first_name': {'required': True, 'allow_blank': False},
             'last_name': {'required': True, 'allow_blank': False},
@@ -81,30 +99,74 @@ class ClientSerializer(serializers.ModelSerializer):
         if not value:
             return value
 
+        text = str(value).strip()
+
         try:
-            # Región por defecto Ecuador (puedes cambiarla dinámicamente después)
-            parsed = phonenumbers.parse(value, "EC")
+            parsed = phonenumbers.parse(text, None)
 
             if not phonenumbers.is_valid_number(parsed):
-                raise serializers.ValidationError("Número de teléfono inválido.")
+                raise serializers.ValidationError("Número telefónico inválido.")
 
-            # Normalizamos a formato internacional E.164
             normalized = phonenumbers.format_number(
                 parsed,
                 phonenumbers.PhoneNumberFormat.E164
             )
 
-            request = self.context.get("request")
-            gym = getattr(request.user, "gym", None)
-            queryset = Client.objects.filter(phone=normalized, gym=gym)
-
-            if self.instance:
-                queryset = queryset.exclude(id=self.instance.id)
-
-            if queryset.exists():
-                raise serializers.ValidationError("Este número ya está registrado.")
-
             return normalized
 
         except phonenumbers.NumberParseException:
-            raise serializers.ValidationError("Formato de número inválido.")
+            raise serializers.ValidationError(
+                "Formato inválido. Use formato internacional. Ej: +593991122334"
+            )
+
+
+    def validate_id_number(self, value):
+        if not value:
+            return value
+
+        text = str(value).strip()
+        country = self.initial_data.get("country")
+        document_type = self.initial_data.get("document_type")
+
+        if not country:
+            raise serializers.ValidationError("Debe especificar el país.")
+
+        if not document_type:
+            raise serializers.ValidationError("Debe especificar el tipo de documento.")
+
+        # 🔹 Validación Ecuador
+        if country == "EC" and document_type == "NATIONAL_ID":
+
+            if not text.isdigit():
+                raise serializers.ValidationError("La cédula ecuatoriana debe contener solo números.")
+
+            if len(text) != 10:
+                raise serializers.ValidationError("La cédula ecuatoriana debe tener 10 dígitos.")
+
+            digits = [int(d) for d in text]
+
+            province = int(text[:2])
+            third = digits[2]
+
+            if not (1 <= province <= 24 and third < 6):
+                raise serializers.ValidationError("Cédula inválida (provincia o tercer dígito incorrecto).")
+
+            total = 0
+            for i in range(9):
+                num = digits[i] * (2 if i % 2 == 0 else 1)
+                if num > 9:
+                    num -= 9
+                total += num
+
+            check_digit = (10 - (total % 10)) % 10
+
+            if digits[9] != check_digit:
+                raise serializers.ValidationError("Cédula inválida (dígito verificador incorrecto).")
+
+            return text
+
+        # 🔹 Otros países o pasaporte
+        if 4 <= len(text) <= 30:
+            return text
+
+        raise serializers.ValidationError("Documento inválido.")

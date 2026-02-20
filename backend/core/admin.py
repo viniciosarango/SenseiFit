@@ -2,6 +2,7 @@ from django.contrib import admin, messages
 from django.utils.html import format_html
 from django.utils import timezone
 from core.utils.hikvision import sync_hikvision_async, revoke_hikvision_access
+from core.models.client_gym import ClientGym
 from django.core.exceptions import ValidationError
 from .models import (
     Company, Gym, User, Client, Membership, Plan, Payment, 
@@ -11,6 +12,12 @@ from .models import (
 from django.contrib.auth.admin import UserAdmin
 
 
+class ClientGymInline(admin.TabularInline):
+    model = ClientGym
+    extra = 0
+    autocomplete_fields = ("gym",)
+
+    
 
 # --- CONFIGURACIÓN ESPECIAL PARA CLIENTES ---
 @admin.register(Client)
@@ -20,19 +27,34 @@ class ClientAdmin(admin.ModelAdmin):
     #exclude = ('user',)
     
     # Lo que verás en la tabla principal
-    list_display = ('id', 'id_number', 'first_name', 'last_name', 'gym', 'phone', 'is_active_member')
+    list_display = ('id', 'id_number', 'first_name', 'last_name', 'company', 'phone', 'is_active_member', "gyms_list","estado",)
     
+    inlines = [ClientGymInline]
+
     # Buscador rápido por nombre o cédula
     search_fields = ('first_name', 'last_name', 'id_number')
     
     # Filtros laterales para segmentar datos
-    list_filter = ('gym', 'gender')
+    list_filter = ('company', 'gender',"is_active")
 
     def is_active_member(self, obj):
         # Esto es un ejemplo de cómo podrías ver rápido si tiene cuenta
         return obj.user is not None
     is_active_member.boolean = True
     is_active_member.short_description = 'Tiene Usuario'
+
+    def estado(self, obj):
+        return "Activo" if obj.is_active else "Inactivo"
+
+    estado.short_description = "Estado"
+    estado.admin_order_field = "is_active"
+
+    def gyms_list(self, obj):
+        return ", ".join(
+            [link.gym.name for link in obj.gym_links.select_related("gym")]
+        )
+
+    gyms_list.short_description = "Gyms"
 
 
 
@@ -197,9 +219,10 @@ class MembershipAdmin(admin.ModelAdmin):
 
 
 
-admin.site.register(Gym)
+@admin.register(Gym)
 class GymAdmin(admin.ModelAdmin):
-    list_display = ('name', 'default_payment_grace_days') # Para verlo en la lista
+    list_display = ("id", "name", "company", 'default_payment_grace_days') # Para verlo en la lista
+    search_fields = ("name",)
     fields = ('name', 'address', 'default_payment_grace_days') # Para editarlo adentro
 
 

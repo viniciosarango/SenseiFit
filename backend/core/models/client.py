@@ -1,7 +1,7 @@
 from django.db import models
 from django.db.models import Q
-from .gym import Gym
 from .user import User
+from .company import Company
 
 
 class Client(models.Model):
@@ -12,9 +12,8 @@ class Client(models.Model):
         ('O', 'Otro'),
     ]
 
-    # 🎯 Multi-tenant obligatorio: cada cliente pertenece a un Gym
-    gym = models.ForeignKey(
-        Gym,
+    company = models.ForeignKey(
+        Company,
         on_delete=models.CASCADE,
         related_name='clients',
         db_index=True
@@ -28,6 +27,26 @@ class Client(models.Model):
         null=True,
         blank=True,
         verbose_name="N. de identificación",
+        db_index=True
+    )
+
+    # País (ISO-2). Default EC para tu caso actual
+    country = models.CharField(
+        max_length=2,
+        default="EC",
+        help_text="Código ISO-2 del país (EC, CO, VE, etc.)",
+        db_index=True
+    )
+
+    DOCUMENT_TYPE_CHOICES = [
+        ("NATIONAL_ID", "Documento Nacional"),
+        ("PASSPORT", "Pasaporte"),
+    ]
+
+    document_type = models.CharField(
+        max_length=20,
+        choices=DOCUMENT_TYPE_CHOICES,
+        default="NATIONAL_ID",
         db_index=True
     )
 
@@ -77,6 +96,20 @@ class Client(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    total_referrals = models.PositiveIntegerField(default=0)
+
+    courtesy_pass_balance = models.PositiveIntegerField(default=0)
+
+    referred_by = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="referrals_made"
+    )
+
     # ==============================
     # PROPIEDADES
     # ==============================
@@ -94,30 +127,18 @@ class Client(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["gym", "last_name"]),
-            models.Index(fields=["gym", "id_number"]),
-            models.Index(fields=["gym", "hikvision_id"]),
-        ]
-        constraints = [
-            # 📌 Teléfono único por gimnasio
-            models.UniqueConstraint(
-                fields=['phone', 'gym'],
-                name='unique_phone_per_gym',
-                condition=Q(phone__isnull=False)
-            ),
 
-            # 📌 Cédula única por gimnasio
+        indexes = [
+            models.Index(fields=["company", "country", "document_type", "id_number"]),
+            models.Index(fields=["company", "is_active"]),
+        ]
+
+        constraints = [
             models.UniqueConstraint(
-                fields=['id_number', 'gym'],
-                name='unique_id_number_per_gym',
+                fields=["company", "country", "document_type", "id_number"],
+                name="unique_document_per_company",
                 condition=Q(id_number__isnull=False)
             ),
-
-            # 📌 Hikvision ID único por gimnasio
-            models.UniqueConstraint(
-                fields=['hikvision_id', 'gym'],
-                name='unique_hikvision_per_gym',
-                condition=Q(hikvision_id__isnull=False)
-            ),
         ]
+        
+        
