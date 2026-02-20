@@ -29,7 +29,7 @@ class GymSerializer(serializers.ModelSerializer):
         """
         Calcula cuántas membresías están actualmente activas en esta sucursal.
         """
-        return obj.membership_set.filter(operational_status="ACTIVE").count()
+        return obj.memberships.filter(operational_status="ACTIVE").count()
 
     def validate_name(self, value):
         """
