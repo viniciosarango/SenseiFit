@@ -1,10 +1,21 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+
+import { useAuthStore } from '@/store/auth'
+import { ref, onMounted, computed } from 'vue';
 import { FilterMatchMode } from '@primevue/core/api';
 import { useToast } from 'primevue/usetoast';
-import { PlanService } from '@/service/PlanService'; // Asegúrate de que este archivo exista
+import { PlanService } from '@/service/PlanService'; 
+import api from '@/service/api'
 
 const toast = useToast();
+
+const authStore = useAuthStore()
+
+const canManagePlans = computed(() =>
+    authStore.role === 'ADMIN'
+)
+
+
 const dt = ref();
 const plans = ref([]);
 const planDialog = ref(false);
@@ -14,6 +25,18 @@ const filters = ref({
     global: { value: null, matchMode: FilterMatchMode.CONTAINS }
 });
 const submitted = ref(false);
+
+const gyms = ref([])
+
+const loadGyms = async () => {
+    try {
+        const response = await api.get('gyms/')
+        gyms.value = response.data
+    } catch (error) {
+        console.error('Error cargando gyms')
+    }
+}
+
 
 // 🎯 Aquí definimos los tipos que hablamos
 const planTypes = [
@@ -33,6 +56,7 @@ const loadPlans = async () => {
 
 onMounted(() => {
     loadPlans();
+    loadGyms();
 });
 
 const openNew = () => {
@@ -50,6 +74,16 @@ const savePlan = async () => {
     submitted.value = true;
 
     if (plan.value.name?.trim()) {
+        
+        if (canManagePlans.value && !plan.value.gym) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Atención',
+                detail: 'Debes seleccionar un gimnasio',
+                life: 3000
+            });
+            return;
+        }
         try {
             // Si no es por sesiones, limpiamos el campo por seguridad
             if (plan.value.plan_type !== 'SESSIONS') {
@@ -95,7 +129,14 @@ const deletePlan = async () => {
     <div class="card">
         <Toolbar class="mb-4">
             <template #start>
-                <Button label="Nuevo Plan" icon="pi pi-plus" severity="success" class="mr-2" @click="openNew" />
+                <Button 
+                    v-if="canManagePlans"
+                    label="Nuevo Plan" 
+                    icon="pi pi-plus" 
+                    severity="success" 
+                    class="mr-2" 
+                    @click="openNew" 
+                />
             </template>
         </Toolbar>
 
@@ -128,11 +169,35 @@ const deletePlan = async () => {
             <Column field="duration_days" header="Duración" sortable>
                 <template #body="slotProps">{{ slotProps.data.duration_days }} días</template>
             </Column>
-            
-            <Column :exportable="false" style="min-width: 8rem">
+
+            <Column field="is_active" header="Estado">
                 <template #body="slotProps">
-                    <Button icon="pi pi-pencil" outlined rounded class="mr-2" @click="editPlan(slotProps.data)" />
-                    <Button icon="pi pi-trash" outlined rounded severity="danger" @click="confirmDeletePlan(slotProps.data)" />
+                    <Tag 
+                        :value="slotProps.data.is_active ? 'Activo' : 'Inactivo'" 
+                        :severity="slotProps.data.is_active ? 'success' : 'danger'" 
+                    />
+                </template>
+            </Column>
+            
+            <Column :exportable="false" style="min-width: 8rem" header="Acciones">
+                <template #body="slotProps">
+                    <Button 
+                        v-if="canManagePlans"
+                        icon="pi pi-pencil" 
+                        outlined 
+                        rounded 
+                        class="mr-2" 
+                        @click="editPlan(slotProps.data)" 
+                    />
+
+                    <Button 
+                        v-if="canManagePlans"
+                        icon="pi pi-trash" 
+                        outlined 
+                        rounded 
+                        severity="danger" 
+                        @click="confirmDeletePlan(slotProps.data)" 
+                    />
                 </template>
             </Column>
         </DataTable>
@@ -142,6 +207,18 @@ const deletePlan = async () => {
                     <label for="name" class="block font-bold mb-3">Nombre</label>
                     <InputText id="name" v-model.trim="plan.name" required="true" autofocus :invalid="submitted && !plan.name" fluid />
                     <small v-if="submitted && !plan.name" class="text-red-500">El nombre es obligatorio.</small>
+                </div>
+
+                <div v-if="canManagePlans">
+                    <label class="block font-bold mb-3">Gimnasio</label>
+                    <Dropdown
+                        v-model="plan.gym"
+                        :options="gyms"
+                        optionLabel="name"
+                        optionValue="id"
+                        placeholder="Seleccione un gimnasio"
+                        class="w-full"
+                    />
                 </div>
                 
                 <div>
