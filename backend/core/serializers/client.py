@@ -4,12 +4,14 @@ from rest_framework import serializers
 from core.models.client import Client
 from core.models.membership import Membership
 from django.templatetags.static import static
+from core.models.client_gym import ClientGym
 
 class ClientSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     membership_info = serializers.SerializerMethodField()
     photo = serializers.ImageField(required=False, allow_null=True)
     photo_url = serializers.SerializerMethodField()
+    gyms = serializers.SerializerMethodField()
 
 
     
@@ -33,6 +35,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'photo_url',
             'membership_info',
             'created_at',
+            'gyms',
         ]
         
         read_only_fields = [
@@ -65,7 +68,14 @@ class ClientSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(path)
         return path
 
-    
+    def get_gyms(self, obj):
+        return [
+            {
+                "id": link.gym.id,
+                "name": link.gym.name
+            }
+            for link in obj.gym_links.select_related("gym").all()
+        ]
 
 
     def get_full_name(self, obj):

@@ -12,6 +12,7 @@ from core.views.access import check_access, access_screen
 from core.views.attendance_screen import last_attendance
 from core.views.auth import MeView, ChangePasswordView
 from core.views.client_profile import ClientMeView
+from core.views.companies import CompanyViewSet
 
 
 
@@ -37,6 +38,8 @@ router.register(r'services', ServiceViewSet, basename='service')
 router.register(r'payment-methods', PaymentMethodViewSet, basename='payment-method')
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'gyms', GymViewSet, basename='gym')
+
+router.register(r'companies', CompanyViewSet, basename='company')
 
 urlpatterns = [
     path('api/', include(router.urls)),

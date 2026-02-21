@@ -12,17 +12,24 @@ class GymViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        queryset = self.queryset
 
-        # Superuser SaaS
+        # 🔥 SUPERUSER SaaS
         if user.is_superuser:
-            return self.queryset
+            company_id = self.request.query_params.get("company")
 
-        # Debe tener empresa
+            # Si viene filtro por company → aplicarlo
+            if company_id:
+                return queryset.filter(company_id=company_id)
+
+            return queryset
+
+        # 🔒 Debe tener empresa
         if not user.company:
             raise PermissionDenied("Usuario sin empresa asignada.")
 
-        # Solo gimnasios de su empresa
-        return self.queryset.filter(company=user.company)
+        # 🔒 ADMIN y STAFF → solo su empresa
+        return queryset.filter(company=user.company)
 
     def perform_create(self, serializer):
         user = self.request.user

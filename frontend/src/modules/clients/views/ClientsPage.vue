@@ -1,15 +1,24 @@
 <script setup>
 import { computed } from 'vue';
 import { watch } from 'vue';
-
-import { ClientService } from '@/service/ClientService';
+import ClientForm from '../components/ClientForm.vue'
+import { clientApi } from '../services/client.api'
 import { FilterMatchMode } from '@primevue/core/api';
 import { useToast } from 'primevue/usetoast';
 import { onMounted, ref } from 'vue';
 import { PlanService } from '@/service/PlanService';
 import { MembershipService } from '@/service/MembershipService';
 import { PaymentMethodService } from '@/service/PaymentMethodService';
+import ClientTable from '../components/ClientTable.vue'
+import api from '@/service/api'
 
+import { companyApi } from '../services/company.api'
+import { gymApi } from '../services/gym.api'
+import { useAuthStore } from '@/store/auth'
+
+const authStore = useAuthStore()
+const companies = ref([])
+const gyms = ref([])
 
 import { useRouter } from 'vue-router'; 
 const router = useRouter();
@@ -19,6 +28,25 @@ const selectedPhoto = ref(null)
 const onPhotoChange = (event) => {
     selectedPhoto.value = event.target.files[0]
 }
+
+async function loadCompanies() {
+  try {
+    companies.value = await companyApi.getAll()
+  } catch (error) {
+    console.error('Error cargando empresas', error)
+  }
+}
+
+async function loadGyms(companyId = null) {
+  try {
+    const params = companyId ? { company: companyId } : {}
+    gyms.value = await gymApi.getAll(params)
+  } catch (error) {
+    console.error('Error cargando gimnasios', error)
+  }
+}
+
+
 
 const verHistorialPagos = (socio) => {
     const mId = socio.membership_info?.id;
@@ -41,12 +69,30 @@ const verHistorialPagos = (socio) => {
 
 const paymentMethods = ref([]);
 
-onMounted(() => {
-    loadClients();
-    loadPlans();
-    loadPaymentMethods();
-    PaymentMethodService.getPaymentMethods().then(data => paymentMethods.value = data);
-});
+
+onMounted(async () => {
+  loadClients()
+  loadPlans()
+  loadPaymentMethods()
+
+  try {
+    const { data: me } = await api.get('me/')
+
+    // 🔥 SUPERUSER
+    if (me.is_superuser) {
+      await loadCompanies()
+    }
+
+    // 🔒 ADMIN normal
+    else if (me.role === 'ADMIN') {
+      await loadGyms()
+    }
+
+  } catch (error) {
+    console.error('Error obteniendo usuario actual', error)
+  }
+})
+
 
 async function loadPaymentMethods() {
     try {
@@ -59,13 +105,13 @@ async function loadPaymentMethods() {
 const toast = useToast();
 const clients = ref([]);
 const dt = ref();
-const clientDialog = ref(false);
-const submitted = ref(false);
-const client = ref({});
 
-const filters = ref({
-    global: { value: null, matchMode: FilterMatchMode.CONTAINS }
-});
+const submitted = ref(false);
+
+const clientDialog = ref(false)
+const selectedClient = ref(null)
+
+;
 
 const deleteClientDialog = ref(false);
 const membershipDialog = ref(false);
@@ -111,8 +157,8 @@ const changeAmount = computed(() => {
 
 
 function editClient(clientData) {
-    client.value = { ...clientData };
-    clientDialog.value = true;
+  selectedClient.value = clientData
+  clientDialog.value = true
 }
 
 const plans = ref([]);
@@ -149,13 +195,12 @@ function onPlanChange() {
 
 
 function loadClients() {
-    ClientService.getClients().then((data) => (clients.value = data));
+  clientApi.getAll().then((data) => (clients.value = data));
 }
 
 function openNew() {
-    client.value = {};
-    submitted.value = false;
-    clientDialog.value = true;
+  selectedClient.value = null
+  clientDialog.value = true
 }
 
 function hideDialog() {
@@ -191,7 +236,11 @@ function saveClient() {
         }
 
         // 4. Envío al servicio
-        ClientService.saveClient(formData, client.value.id)
+        const request = client.value.id
+            ? clientApi.update(client.value.id, formData)
+            : clientApi.create(formData)
+
+            request
             .then(() => {
                 const mensaje = client.value.id ? 'Socio Actualizado' : 'Socio Creado';
                 toast.add({
@@ -207,7 +256,6 @@ function saveClient() {
                 loadClients();
             })
             .catch(err => {
-                // Capturamos el error detallado del backend (ej. "Cédula ya registrada")
                 const detail = err.response?.data?.detail || 'No se pudo procesar la solicitud';
                 toast.add({
                     severity: 'error',
@@ -216,6 +264,7 @@ function saveClient() {
                     life: 5000
                 });
             });
+
     } else {
         // Notificación visual si faltan campos obligatorios
         toast.add({
@@ -235,17 +284,20 @@ function confirmDeleteClient(clientData) {
 }
 
 function deleteClient() {
-    ClientService.deleteClient(client.value.id).then(() => {
+    clientApi.delete(client.value.id).then(() => {
         deleteClientDialog.value = false;
         client.value = {};
         loadClients();
-        toast.add({ severity: 'success', summary: 'Éxito', detail: 'Socio Eliminado', life: 3000 });
+        toast.add({ 
+            severity: 'success', 
+            summary: 'Éxito', 
+            detail: 'Socio Eliminado', 
+            life: 3000 
+        });
     });
 }
 
-function exportCSV() {
-    dt.value.exportCSV();
-}
+
 
 async function saveMembership() {
     const totalActual = totalToPay.value;
@@ -279,212 +331,21 @@ async function saveMembership() {
     }
 }
 
-const getStatusLabel = (status) => {
-    const statuses = {
-        'ACTIVE': 'ACTIVO',
-        'SCHEDULED': 'PROGRAMADA',
-        'EXPIRED': 'VENCIDO',
-        'CANCELLED': 'CANCELADO',
-        'FROZEN': 'CONGELADA'
-    };
-    return statuses[status] || 'SIN MEMBRESÍA';
-};
-
-// 🎯 Traductor de colores (Semáforo)
-const getStatusSeverity = (status) => {
-    const severities = {
-        'ACTIVE': 'success',    // Verde
-        'SCHEDULED': 'info',     // Azul
-        'EXPIRED': 'warn',       // Naranja
-        'CANCELLED': 'danger',   // Rojo
-        'FROZEN': 'secondary'    // Gris
-    };
-    return severities[status] || 'secondary';
-};
-
-
-
-
 </script>
+
+
+
 
 <template>
     <div class="card">
-        <Toolbar class="mb-6">
-            <template #start>
-                <Button label="Nuevo Socio" icon="pi pi-plus" severity="success" class="mr-2" @click="openNew" />
-            </template>
-            <template #end>
-                
-            </template>
-        </Toolbar>
-
-        <DataTable
-            ref="dt"
-            :value="clients"
-            dataKey="id"
-            :paginator="true"
-            :rows="10"
-            :filters="filters"
-            paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport RowsPerPageDropdown"
-            :rowsPerPageOptions="[5, 10, 25]"
-            currentPageReportTemplate="Mostrando {first} a {last} de {totalRecords} socios"
-        >
-            <template #header>
-                <div class="flex flex-wrap gap-2 items-center justify-between">
-                    <h4 class="m-0">Gestión de Socios</h4>
-                    <IconField>
-                        <InputIcon><i class="pi pi-search" /></InputIcon>
-                        <InputText v-model="filters['global'].value" placeholder="Buscar socio..." />
-                    </IconField>
-                </div>
-            </template>
-
-            <Column field="id_number" header="Cédula" sortable></Column>
-            
-            <Column field="hikvision_id" header="ID Hikvision" sortable style="min-width: 10rem">
-                <template #body="slotProps">
-                    <span class="font-mono text-blue-600">
-                        {{ slotProps.data.hikvision_id || 'Sin asignar' }}
-                    </span>
-                </template>
-            </Column>
-            
-            <Column field="last_name" header="Apellidos" sortable>
-                <template #body="slotProps">
-                    <span class="font-bold uppercase text-900">
-                        {{ slotProps.data.last_name }}
-                    </span>
-                </template>
-            </Column>
-
-            <Column field="first_name" header="Nombres" sortable>
-                <template #body="slotProps">
-                    <span class="font-bold uppercase text-900">
-                        {{ slotProps.data.first_name }}
-                    </span>
-                </template>
-            </Column>
-
-            
-            <Column header="Foto">
-                <template #body="slotProps">
-                    <img 
-                    :src="slotProps.data.photo_url" 
-                    class="border-circle"
-                    style="width:50px; height:50px; object-fit:cover"
-                    />
-                </template>     
-            </Column>
-
-
-            <Column field="phone" header="Teléfono"></Column>
-
-            <Column header="Estado Membresía" sortable field="membership_info.status">
-                <template #body="slotProps">
-                    <Tag 
-                        :value="getStatusLabel(slotProps.data.membership_info.status)" 
-                        :severity="getStatusSeverity(slotProps.data.membership_info.status)" 
-                        class="shadow-1"
-                    />
-                </template>
-            </Column>
-
-            <Column :exportable="false" style="min-width: 12rem" header="Acciones">
-                <template #body="slotProps">
-                    <Button 
-                        icon="pi pi-ticket" 
-                        rounded 
-                        severity="success" 
-                        class="mr-2 shadow-2" 
-                        @click="openNewMembership(slotProps.data)" 
-                        v-tooltip.top="'Vender Membresía'"
-                    />
-                    <Button 
-                        icon="pi pi-pencil" 
-                        outlined rounded 
-                        class="mr-2" 
-                        @click="editClient(slotProps.data)" 
-                    />
-                    <Button 
-                        icon="pi pi-trash" 
-                        outlined rounded 
-                        severity="danger" 
-                        @click="confirmDeleteClient(slotProps.data)" 
-                    />
-                    <Button 
-                        icon="pi pi-history" 
-                        rounded 
-                        outlined
-                        severity="info" 
-                        class="mr-2 shadow-1" 
-                        @click="verHistorialPagos(slotProps.data)" 
-                        v-tooltip.top="'Ver Historial de Pagos'"
-                    />
-                </template>
-            </Column>
-        </DataTable>
-        <Dialog v-model:visible="clientDialog" :style="{ width: '550px' }" header="Registro de Socio" :modal="true" class="p-fluid">
-            <div class="grid grid-cols-12 gap-4">
-                <div class="col-span-12 md:col-span-6">
-                    <label class="font-bold">Nombre *</label>
-                    <InputText v-model.trim="client.first_name" required="true" />
-                </div>
-                <div class="col-span-12 md:col-span-6">
-                    <label class="font-bold">Apellido *</label>
-                    <InputText v-model.trim="client.last_name" required="true" />
-                </div>
-
-                <div class="col-span-12 md:col-span-6">
-                    <label class="font-bold">Cédula / ID</label>
-                    <InputText v-model.trim="client.id_number" />
-                </div>
-                <div class="col-span-12 md:col-span-6">
-                    <label class="font-bold">ID Hikvision (Lector)</label>
-                    <InputText v-model.trim="client.hikvision_id" placeholder="employeeNoString" />
-                </div>
-
-                <div class="col-span-12 md:col-span-6">
-                    <label class="font-bold">Correo Electrónico</label>
-                    <InputText v-model.trim="client.email" type="email" />
-                </div>
-                <div class="col-span-12 md:col-span-6">
-                    <label class="font-bold">Teléfono</label>
-                    <InputText v-model.trim="client.phone" />
-                </div>
-
-                <div class="col-span-12 md:col-span-6">
-                    <label class="font-bold">Fecha Nacimiento</label>
-                    <InputText v-model="client.birth_date" type="date" />
-                </div>
-
-                <div class="col-span-12 md:col-span-6">
-                    <label class="font-bold">Género</label>
-                    <Select v-model="client.gender" :options="[
-                        {label: 'Masculino', value: 'M'}, 
-                        {label: 'Femenino', value: 'F'}, 
-                        {label: 'Otro', value: 'O'}
-                    ]" optionLabel="label" optionValue="value" placeholder="Seleccionar" />
-                </div>
-
-                <div class="col-span-12 md:col-span-6">
-                    <label>Foto</label>
-                    <input
-                        type="file"
-                        accept="image/*"
-                        @change="onPhotoChange"
-                        class="w-full"
-                    />
-                </div>
-
-
-            </div>
-
-            <template #footer>
-                <Button label="Cancelar" icon="pi pi-times" text @click="hideDialog" />
-                <Button label="Guardar" icon="pi pi-check" @click="saveClient" />
-            </template>
-        </Dialog>
-
+        <ClientTable
+            :clients="clients"
+            @new="openNew"
+            @edit="editClient"
+            @delete="confirmDeleteClient"
+            @sell-membership="openNewMembership"
+            @view-history="verHistorialPagos"
+        />
         <Dialog v-model:visible="deleteClientDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
             <div class="flex items-center gap-4">
                 <i class="pi pi-exclamation-triangle text-3xl text-red-500" />
@@ -591,6 +452,12 @@ const getStatusSeverity = (status) => {
                 <Button label="Registrar Venta" icon="pi pi-check" severity="success" @click="saveMembership" :disabled="!membership.plan_id" />
             </template>
         </Dialog>
+
+        <ClientForm
+            v-model:visible="clientDialog"
+            :clientData="selectedClient"
+            @saved="loadClients"
+        />
 
     </div>
 </template>

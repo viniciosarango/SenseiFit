@@ -12,7 +12,12 @@ const router = createRouter({
       children: [
         { path: '/', redirect: '/clientes' },
 
-        { path: '/clientes', name: 'clientes', component: () => import('@/views/pages/Clientes.vue') },
+        { 
+          path: '/clientes', 
+          name: 'clientes', 
+          component: () => import('../modules/clients/views/ClientsPage.vue') 
+        },
+        
         { path: '/clients/:id', name: 'client-profile', component: () => import('@/views/pages/ClientProfile.vue') },
 
         { path: '/membresias', name: 'membresias', component: () => import('@/views/pages/Membresias.vue') },

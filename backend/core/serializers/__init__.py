@@ -14,3 +14,4 @@ from .inventory import InventorySerializer
 from .gym import GymSerializer
 from .user import UserSerializer
 from .payment_method import PaymentMethodSerializer
+from .company import CompanySerializer
