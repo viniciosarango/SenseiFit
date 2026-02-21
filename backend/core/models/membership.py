@@ -119,9 +119,10 @@ class Membership(models.Model):
     def clean(self):
         super().clean()
 
-        # 1️⃣ Cliente debe pertenecer al mismo gym
-        if self.client and self.gym and self.client.gym_id != self.gym_id:
-            raise ValidationError("El cliente no pertenece a este gimnasio.")
+        # 1️⃣ Cliente debe estar vinculado al gym (ClientGym)
+        if self.client_id and self.gym_id:
+            if not self.client.gym_links.filter(gym_id=self.gym_id).exists():
+                raise ValidationError("El cliente no pertenece a este gimnasio.")
 
         # 2️⃣ Plan debe pertenecer al mismo gym
         if self.plan and self.gym and self.plan.gym_id != self.gym_id:
@@ -155,9 +156,6 @@ class Membership(models.Model):
 
     def save(self, *args, **kwargs):
 
-        # Ejecuta validaciones SIEMPRE
-        self.full_clean()
-
         # Inicializa sesiones si es nueva y es plan por sesiones
         if not self.pk and self.plan.plan_type == 'SESSIONS':
             self.sessions_total = self.plan.total_sessions
@@ -178,6 +176,9 @@ class Membership(models.Model):
         else:
             self.financial_status = 'Deuda'
 
+        # ✅ AHORA validamos con todos los valores ya calculados
+        self.full_clean()
+
         super().save(*args, **kwargs)
 
     # ============================================================
@@ -193,9 +194,9 @@ class Membership(models.Model):
 
         constraints = [
             models.UniqueConstraint(
-                fields=["client", "gym"],
+                fields=["client", "gym", "plan"],
                 condition=models.Q(operational_status="ACTIVE"),
-                name="uniq_active_membership_per_client_gym"
+                name="uniq_active_membership_per_client_gym_plan"
             )
         ]
 

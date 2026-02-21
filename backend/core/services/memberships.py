@@ -33,6 +33,9 @@ def create_membership_service(
     except Plan.DoesNotExist:
         raise MembershipError("El plan seleccionado no existe.")
 
+    if plan.gym_id != gym.id:
+            raise MembershipError("El plan no pertenece a este gimnasio.")
+
     today = timezone.localdate()
     start_date = requested_start_date or today
 
@@ -40,13 +43,14 @@ def create_membership_service(
     active_mem = Membership.objects.filter(
         client=client,
         gym=gym,
-        operational_status="ACTIVE"
+        operational_status="ACTIVE",
+        plan__plan_type=plan.plan_type
     ).first()
 
     # 3) Lógica de Fila de Renovación
     # 🎯 Solo buscamos la "última" si NO es un plan de sesiones (Ticketera)
     last_mem = None
-    if plan.plan_type not in ['SESSIONS', 'DAILY']:
+    if plan.plan_type == 'TIME':
         last_mem = Membership.objects.filter(
             client=client,
             gym=gym,
@@ -121,6 +125,33 @@ def create_membership_service(
 
     membership.refresh_from_db()
 
+    # --------------------------------------------------------
+    # Reordenar cola TIME si se forzó ACTIVE
+    # --------------------------------------------------------
+    if force_operational_status == "ACTIVE" and plan.plan_type == "TIME":
+
+        # Buscar TIME programadas futuras
+        scheduled_times = Membership.objects.filter(
+            client=client,
+            gym=gym,
+            plan__plan_type="TIME",
+            operational_status="SCHEDULED"
+        ).order_by("start_date")
+
+        last_end_date = membership.end_date
+
+        for m in scheduled_times:
+            duration = m.plan.duration_days
+
+            new_start = last_end_date + timedelta(days=1)
+            new_end = new_start + timedelta(days=duration - 1)
+
+            m.start_date = new_start
+            m.end_date = new_end
+            m.save(update_fields=["start_date", "end_date"])
+
+            last_end_date = new_end
+
     # Plazo de pago si quedó deuda
     if membership.balance > 0 and not membership.payment_due_date:
         membership.payment_due_date = today + timedelta(days=7)
@@ -151,6 +182,61 @@ def cancel_membership_service(*, membership, requested_by, pin: str, reason: str
     membership.save(update_fields=["operational_status", "notes"])
 
     # 4) (Opcional) sync hikvision para cortar acceso
+    sync_hikvision_async(membership)
+
+    return membership
+
+
+
+@transaction.atomic
+def activate_membership_now(*, membership: Membership, activated_by):
+
+    today = timezone.localdate()
+
+    if membership.operational_status != "SCHEDULED":
+        raise MembershipError("Solo se pueden activar membresías programadas.")
+
+    # Verificar que no exista otra ACTIVE
+    existing_active = Membership.objects.filter(
+        client=membership.client,
+        gym=membership.gym,
+        operational_status="ACTIVE"
+    ).exists()
+
+    if existing_active:
+        raise MembershipError("Ya existe una membresía activa para este cliente.")
+
+    # Recalcular fechas
+    membership.start_date = today
+    membership.end_date = today + timedelta(days=membership.plan.duration_days - 1)
+    membership.operational_status = "ACTIVE"
+
+    membership.save(update_fields=[
+        "start_date",
+        "end_date",
+        "operational_status"
+    ])
+
+    # Reordenar futuras SCHEDULED
+    next_start = membership.end_date + timedelta(days=1)
+
+    future_queue = (
+        Membership.objects
+        .filter(
+            client=membership.client,
+            gym=membership.gym,
+            operational_status="SCHEDULED",
+            start_date__gt=membership.start_date
+        )
+        .order_by("start_date")
+    )
+
+    for future in future_queue:
+        future.start_date = next_start
+        future.end_date = next_start + timedelta(days=future.plan.duration_days - 1)
+        future.save(update_fields=["start_date", "end_date"])
+        next_start = future.end_date + timedelta(days=1)
+
     sync_hikvision_async(membership)
 
     return membership

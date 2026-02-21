@@ -42,7 +42,6 @@ const loadGyms = async () => {
 const planTypes = [
     { label: 'Tiempo', value: 'TIME' },
     { label: 'Sesiones', value: 'SESSIONS' },
-    { label: 'Día', value: 'DAILY' }
 ];
 
 // Función para traer los planes del backend

@@ -39,6 +39,8 @@ class Attendance(models.Model):
     check_in_time = models.DateTimeField(auto_now_add=True)
     check_out_time = models.DateTimeField(null=True, blank=True)
 
+    is_allowed = models.BooleanField(default=True)
+
     method = models.CharField(
         max_length=20,
         choices=METHODS,

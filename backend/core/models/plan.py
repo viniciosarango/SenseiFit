@@ -7,9 +7,8 @@ from django.core.exceptions import ValidationError
 class Plan(models.Model):
 
     PLAN_TYPES = [
-        ('TIME', 'Por Tiempo (Mes, Trimestre, etc.)'),
-        ('SESSIONS', 'Por Sesiones (Tarjetero)'),
-        ('DAILY', 'Día Individual'),
+        ('TIME', 'Por Tiempo'),
+        ('SESSIONS', 'Por Sesiones'),
     ]
 
     gym = models.ForeignKey(
@@ -52,7 +51,7 @@ class Plan(models.Model):
         if self.plan_type == "SESSIONS" and self.total_sessions <= 0:
             raise ValidationError("Los planes por sesiones deben tener total_sessions > 0.")
 
-        if self.plan_type in ["TIME", "DAILY"] and self.duration_days <= 0:
+        if self.plan_type == "TIME" and self.duration_days <= 0:
             raise ValidationError("Los planes por tiempo deben tener duración válida.")
 
     # ============================================================

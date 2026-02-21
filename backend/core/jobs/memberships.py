@@ -33,11 +33,15 @@ def run_membership_lifecycle():
 
     for membership in to_activate:
         # 🔒 Seguridad: no activar si ya hay una ACTIVE
-        has_active = Membership.objects.filter(
+        has_active_same_type = Membership.objects.filter(
             client=membership.client,
             gym=membership.gym,
-            operational_status="ACTIVE"
+            operational_status="ACTIVE",
+            plan__plan_type=membership.plan.plan_type
         ).exists()
+
+        if has_active_same_type:
+            continue
 
         if has_active:
             continue

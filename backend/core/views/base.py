@@ -28,8 +28,8 @@ class CompanyGymScopedViewSet(viewsets.ModelViewSet):
         if user.role == user.Roles.STAFF:
             return queryset.filter(gym=user.gym)
 
-        # CLIENT → solo su gym
+        # CLIENT → solo sus propias memberships
         if user.role == user.Roles.CLIENT:
-            return queryset.filter(gym=user.gym)
+            return queryset.filter(client__user=user)
 
         return queryset.none()

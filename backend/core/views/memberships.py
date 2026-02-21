@@ -3,11 +3,12 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
-from core.models import Membership
+from core.models import Membership, ClientGym, Gym, Company
 from core.serializers import MembershipSerializer
 from core.services.memberships import create_membership_service, MembershipError, cancel_membership_service
 from core.services.payments import register_payment
 from .base import CompanyGymScopedViewSet
+from core.services.memberships import activate_membership_now
 
 
 class MembershipViewSet(CompanyGymScopedViewSet):
@@ -18,11 +19,20 @@ class MembershipViewSet(CompanyGymScopedViewSet):
     def get_queryset(self):
         user = self.request.user
 
-        # 🔴 CLIENT → solo sus propias membresías
-        if user.role == user.Roles.CLIENT:
-            return Membership.objects.filter(
-                client__user=user
-            ).select_related('client', 'plan').order_by('-created_at')
+        def get_queryset(self):
+            queryset = super().get_queryset()
+
+            f_status = self.request.query_params.get('financial_status')
+            o_status = self.request.query_params.get('operational_status')
+
+            if f_status:
+                queryset = queryset.filter(financial_status__in=f_status.split(','))
+
+            if o_status:
+                queryset = queryset.filter(operational_status=o_status)
+
+            return queryset.select_related('client', 'plan').order_by('-created_at')
+
 
         # 🟢 ADMIN / STAFF / SUPERUSER → usar blindaje base
         queryset = super().get_queryset()
@@ -41,49 +51,85 @@ class MembershipViewSet(CompanyGymScopedViewSet):
 
 
 
-
-
-
-
-
-
     def create(self, request, *args, **kwargs):
-        
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        user = self.request.user
+
+        user = request.user
         data = serializer.validated_data
 
-        if not user.is_superuser:
-            if data['client'].gym != user.gym or data['plan'].gym != user.gym:
-                raise ValidationError("El cliente o el plan no pertenecen a tu sucursal.")
+        client = data["client"]
+        plan_id = data["plan_id"]
 
+        # 1) Resolver gym según rol (NUEVA ARQUITECTURA)
+        if user.is_superuser:
+            company_id = request.data.get("company")
+            gym_id = request.data.get("gym")
+
+            if not company_id:
+                raise ValidationError({"detail": "Debe especificar la empresa."})
+            if not gym_id:
+                raise ValidationError({"detail": "Debe especificar el gimnasio."})
+
+            try:
+                company = Company.objects.get(id=company_id)
+            except Company.DoesNotExist:
+                raise ValidationError({"detail": "Empresa inválida."})
+
+            try:
+                gym = Gym.objects.get(id=gym_id, company=company)
+            except Gym.DoesNotExist:
+                raise ValidationError({"detail": "Gimnasio inválido para esta empresa."})
+
+        elif user.role == user.Roles.ADMIN:
+            if not user.company:
+                raise ValidationError({"detail": "Usuario ADMIN sin empresa asignada."})
+
+            gym_id = request.data.get("gym")
+            if not gym_id:
+                raise ValidationError({"detail": "Debe especificar el gimnasio."})
+
+            try:
+                gym = Gym.objects.get(id=gym_id, company=user.company)
+            except Gym.DoesNotExist:
+                raise ValidationError({"detail": "Gimnasio inválido para tu empresa."})
+
+        elif user.role == user.Roles.STAFF:
+            if not user.gym:
+                raise ValidationError({"detail": "Usuario STAFF sin gimnasio asignado."})
+            gym = user.gym
+
+        else:
+            raise ValidationError({"detail": "No tienes permiso para crear membresías."})
+
+        # Seguridad multi-tenant: cliente debe pertenecer a la misma company del gym
+        if client.company_id != gym.company_id:
+            raise ValidationError({"client": "El cliente no pertenece a esta empresa."})
+        
+        # 2) Validar que el cliente esté vinculado al gym vía ClientGym
+        if not ClientGym.objects.filter(client=client, gym=gym).exists():
+            raise ValidationError({"client": "Este cliente no pertenece a esta sucursal."})
+
+        # 3) Dejar que el servicio haga su magia
         try:
-            # Delegamos la "magia" al servicio que ya tienes
             membership = create_membership_service(
-                gym=user.gym,
-                client=data['client'],
-                plan_id=data['plan_id'],
-
-                requested_start_date=data.get('requested_start_date'),            
-                #requested_start_date=data.get('start_date', timezone.now().date()),
-                
-                created_by=user,                
-                discount_percent=data.get('discount_percent_applied', 0),
-                paid_amount=data.get('paid_amount', 0),
-                payment_method_id=data.get('payment_method_id'),
-                #is_upgrade=data.get('is_upgrade', False), # El nuevo interruptor
-                notes=data.get('notes', ""),
+                gym=gym,
+                client=client,
+                plan_id=plan_id,
+                requested_start_date=data.get("requested_start_date"),
+                created_by=user,
+                discount_percent=data.get("discount_percent_applied", 0),
+                paid_amount=data.get("paid_amount", 0),
+                payment_method_id=data.get("payment_method_id"),
+                notes=data.get("notes", ""),
                 force_operational_status=data.get("operational_status"),
             )
-                        
+
             response_serializer = self.get_serializer(membership)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
         except MembershipError as e:
             raise ValidationError({"detail": str(e)})
-        
 
 
 
@@ -125,3 +171,21 @@ class MembershipViewSet(CompanyGymScopedViewSet):
             return Response({"detail": "Membresía cancelada."}, status=status.HTTP_200_OK)
         except MembershipError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+     
+        
+    @action(detail=True, methods=["post"], url_path="activate-now")
+    def activate_now(self, request, pk=None):
+        membership = self.get_object()
+
+        try:
+            updated = activate_membership_now(
+                membership=membership,
+                activated_by=request.user
+            )
+
+            serializer = self.get_serializer(updated)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except MembershipError as e:
+            raise ValidationError({"detail": str(e)})

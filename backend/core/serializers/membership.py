@@ -1,9 +1,8 @@
 from rest_framework import serializers
-from core.models import Membership
+from core.models import Membership, ClientGym
 
 
 class MembershipSerializer(serializers.ModelSerializer):
-
     # Lectura amigable
     client_name = serializers.CharField(source="client", read_only=True)
     client_id_number = serializers.ReadOnlyField(source="client.id_number")
@@ -57,43 +56,22 @@ class MembershipSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, data):
+        """
+        ⚠️ Nota importante:
+        En tu nuevo diseño el gym correcto se determina en la VIEW (por rol).
+        Aquí solo validamos reglas de negocio base, y evitamos client.gym.
+        """
         request = self.context.get("request")
         if not request:
             return data
 
         user = request.user
 
-        client = data.get("client")
-        plan = data.get("plan")
-
-        # 🔒 SUPERUSER puede todo
-        if user.is_superuser:
-            return data
-
-        # 🔒 Usuario debe tener gym asignado
-        if not user.gym:
-            raise serializers.ValidationError(
-                {"detail": "Usuario sin gimnasio asignado."}
-            )
-
-        # 🔒 Cliente debe pertenecer al gym del usuario
-        if client and client.gym != user.gym:
-            raise serializers.ValidationError(
-                {"client": "Este cliente no pertenece a tu sucursal."}
-            )
-
-        # 🔒 Plan debe pertenecer al gym del usuario
-        if plan and plan.gym != user.gym:
-            raise serializers.ValidationError(
-                {"plan": "Este plan no pertenece a tu sucursal."}
-            )
-
-        # 🔒 Solo ADMIN puede forzar operational_status
+        # Solo ADMIN puede forzar operational_status
         if "operational_status" in data:
-            if user.role != user.Roles.ADMIN:
+            if not user.is_superuser and user.role != user.Roles.ADMIN:
                 raise serializers.ValidationError(
                     {"operational_status": "No tienes permisos para forzar el estado de la membresía."}
                 )
 
         return data
-

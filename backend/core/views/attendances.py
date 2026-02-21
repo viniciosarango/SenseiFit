@@ -46,7 +46,7 @@ class AttendanceWebhookView(APIView):
 
         # 3. Resolver cliente
         try:
-            client = Client.objects.select_related("gym").get(
+            client = Client.objects.get(
                 hikvision_id=hikvision_id
             )
         except Client.DoesNotExist:

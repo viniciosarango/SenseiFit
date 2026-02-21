@@ -61,8 +61,7 @@ def register_attendance(
     # Crear la asistencia ANTES de validar. 
     attendance = Attendance.objects.create(
         client=client,
-        #gym=membership.gym if membership else client.gym, # Fallback al gym del cliente
-        gym=client.gym,
+        gym=membership.gym if membership else None,
         membership=membership,
         method=method,
     )
@@ -97,7 +96,7 @@ def register_attendance(
     # ======================
     # PLANES POR TIEMPO
     # ======================
-    if plan_type in ["TIME", "DAILY"]:
+    if plan_type == "TIME":
         already_attended_today = Attendance.objects.filter(
             client=client,
             check_in_time__date=today,
@@ -120,22 +119,71 @@ def register_attendance(
     # ======================
     # PLANES POR SESIONES
     # ======================
+    
     elif plan_type == "SESSIONS":
-        if membership.sessions_remaining <= 0:
+
+        # Contar sesiones ANTES de considerar esta asistencia
+        used_sessions = Attendance.objects.filter(
+            membership=membership
+        ).exclude(id=attendance.id).count()
+
+        remaining_before = membership.sessions_total - used_sessions
+
+        if remaining_before <= 0:
+            attendance.is_allowed = False
+            attendance.denial_reason = "no_sessions_left"
+            attendance.message_displayed = "No tienes sesiones disponibles."
+            attendance.save(update_fields=["is_allowed", "denial_reason", "message_displayed"])
+
             return AttendanceResult(
                 success=False,
                 attendance_created=True,
                 message="No tienes sesiones disponibles.",
                 reason="no_sessions_left",
                 attendance=attendance,
-                extra_data={"remaining_sessions": 0, "plan_kind": "SESSIONS"}
+                extra_data={
+                    "remaining_sessions": 0,
+                    "plan_kind": "SESSIONS"
+                }
             )
 
-        membership.sessions_consumed += 1
+        # Ahora sí: esta asistencia consume sesión
+        new_used = used_sessions + 1
+        membership.sessions_consumed = new_used
         membership.save(update_fields=["sessions_consumed"])
 
-        attendance.message_displayed = msg # 🎯 AQUÍ
-        attendance.save()
+        remaining_after = membership.sessions_total - new_used
+
+        # Si se agotaron después de este ingreso
+        if remaining_after <= 0:
+            membership.operational_status = "EXPIRED"
+            membership.save(update_fields=["operational_status"])
+
+            # Sincronizar control de acceso
+            from core.utils.hikvision import sync_hikvision_async
+            sync_hikvision_async(membership)
+
+            # Activar siguiente SCHEDULED
+            next_membership = (
+                Membership.objects
+                .filter(
+                    client=membership.client,
+                    gym=membership.gym,
+                    operational_status="SCHEDULED",
+                    plan__plan_type="SESSIONS"
+                )
+                .order_by("start_date")
+                .first()
+            )
+
+            if next_membership:
+                next_membership.operational_status = "ACTIVE"
+                next_membership.save(update_fields=["operational_status"])
+
+        attendance.is_allowed = True
+        attendance.message_displayed = "Sesión registrada correctamente."
+        attendance.save(update_fields=["is_allowed", "message_displayed"])
+
         return AttendanceResult(
             success=True,
             attendance_created=True,
@@ -143,7 +191,7 @@ def register_attendance(
             reason="session_consumed",
             attendance=attendance,
             extra_data={
-                "remaining_sessions": membership.sessions_remaining,
+                "remaining_sessions": remaining_after,
                 "plan_kind": "SESSIONS"
             }
         )
@@ -156,21 +204,13 @@ def register_attendance(
 # =========================================================
 
 def _get_client(client_id: int) -> Optional[Client]:
-    
     try:
-        return Client.objects.select_related("gym").get(id=client_id)
+        return Client.objects.get(id=client_id)
     except Client.DoesNotExist:
         return None
 
 
 def _get_active_membership(client: Client) -> Optional[Membership]:
-    """
-    Obtiene la membresía activa del cliente.
-
-    Retorna:
-    - Membership activa si existe
-    - None si no tiene membresía activa
-    """
     return (
         Membership.objects
         .select_related("plan", "gym")
@@ -238,7 +278,7 @@ def _handle_time_based_plan(
     method: str,
 ) -> AttendanceResult:
     """
-    Maneja planes por tiempo (TIME y DAILY).
+    Maneja planes por tiempo (TIME).
 
     Regla:
     - Solo una asistencia por día
@@ -264,10 +304,9 @@ def _handle_time_based_plan(
     # Crear la asistencia
     attendance = Attendance.objects.create(
         client=client,
-        gym=membership.gym,
+        gym=membership.gym if membership else None,
         membership=membership,
         method=method,
-        message_displayed="¡Bienvenido! Asistencia registrada.",
     )
 
     return AttendanceResult(

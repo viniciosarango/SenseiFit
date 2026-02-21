@@ -49,6 +49,6 @@ urlpatterns = [
     path('api/me/', MeView.as_view(), name='me'),
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('api/client/me/', ClientMeView.as_view(), name='client-me'),
-
+    path('api/attendance-webhook/', AttendanceWebhookView.as_view(), name='attendance-webhook'),
 
 ]
