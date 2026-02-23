@@ -25,5 +25,23 @@ export const MembershipService = {
             reason: reason
         });
         return response.data;
-    }
+    },
+
+    async activateMembership(id) {
+        const response = await api.post(`/memberships/${id}/activate/`);
+        return response.data;
+    },
+
+
+    freezeMembership(id, pin) {
+        return api.post(`/memberships/${id}/freeze/`, {
+            pin: String(pin)
+        });
+    },
+
+    unfreezeMembership(id, pin) {
+        return api.post(`/memberships/${id}/unfreeze/`, { pin });
+    },
+
+
 };

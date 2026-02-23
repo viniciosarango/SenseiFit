@@ -115,6 +115,13 @@ class MembershipAdmin(admin.ModelAdmin):
         ('Estado Financiero', {
             'fields': ('paid_amount', 'balance', 'financial_status', 'is_synced_with_hik')
         }),
+
+        ("Congelamiento", {
+            "fields": (
+                "freeze_start_date",
+                "total_freeze_days",
+            )
+        }),
     )
 
     readonly_fields = (

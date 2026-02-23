@@ -240,3 +240,109 @@ def activate_membership_now(*, membership: Membership, activated_by):
     sync_hikvision_async(membership)
 
     return membership
+
+
+
+@transaction.atomic
+def freeze_membership_service(*, membership: Membership, requested_by, pin: str):
+
+    today = timezone.localdate()
+
+    # 🔒 Validar PIN primero
+    from django.conf import settings
+    expected_pin = getattr(settings, "CANCEL_PIN", None)
+
+    if not expected_pin:
+        raise MembershipError("No hay PIN configurado.")
+
+    if str(pin) != str(expected_pin):
+        raise MembershipError("PIN incorrecto. No autorizado.")
+
+    # 🧠 Reglas de negocio
+    if membership.plan.plan_type != "TIME":
+        raise MembershipError("Solo los planes por tiempo pueden congelarse.")
+
+    if membership.operational_status != "ACTIVE":
+        raise MembershipError("Solo una membresía activa puede congelarse.")
+    
+    if membership.balance > 0:
+        raise MembershipError(
+            f"No se puede congelar. Tiene saldo pendiente de ${membership.balance}."
+        )
+
+    if membership.total_freeze_days >= 30:
+        raise MembershipError("Ya alcanzó el máximo de 30 días de congelamiento.")
+
+    # 🎯 Aplicar congelamiento
+    membership.operational_status = "FROZEN"
+    membership.freeze_start_date = today
+    membership.freeze_requested_by = requested_by
+    membership.freeze_timestamp = timezone.now()
+
+    membership.save(update_fields=[
+        "operational_status",
+        "freeze_start_date",
+        "freeze_requested_by",
+        "freeze_timestamp"
+    ])
+
+    return membership
+
+
+
+@transaction.atomic
+def unfreeze_membership_service(*, membership: Membership, requested_by, pin: str):
+
+    from django.conf import settings
+    expected_pin = getattr(settings, "CANCEL_PIN", None)
+
+    if not expected_pin:
+        raise MembershipError("No hay PIN configurado.")
+
+    if str(pin) != str(expected_pin):
+        raise MembershipError("PIN incorrecto. No autorizado.")
+
+    today = timezone.localdate()
+
+    if membership.operational_status != "FROZEN":
+        raise MembershipError("La membresía no está congelada.")
+
+    if not membership.freeze_start_date:
+        raise MembershipError("Error interno: fecha de congelamiento no encontrada.")
+
+    frozen_days = (today - membership.freeze_start_date).days
+
+    if frozen_days <= 0:
+        raise MembershipError("No se puede descongelar el mismo día.")
+
+    if membership.total_freeze_days + frozen_days >= 30:
+        membership.operational_status = "INACTIVE"
+        membership.freeze_start_date = None
+        membership.total_freeze_days = 30
+        membership.save(update_fields=[
+            "operational_status",   
+            "freeze_start_date",
+            "total_freeze_days"
+        ])
+        raise MembershipError("Límite de 30 días alcanzado. La membresía quedó inactiva.")
+
+    membership.end_date += timedelta(days=frozen_days)
+    membership.total_freeze_days += frozen_days
+    membership.operational_status = "ACTIVE"
+    membership.freeze_start_date = None
+    membership.unfreeze_requested_by = requested_by
+    membership.unfreeze_timestamp = timezone.now()
+
+    membership.save(update_fields=[
+        "end_date",
+        "total_freeze_days",
+        "operational_status",
+        "freeze_start_date",
+        "unfreeze_requested_by",
+        "unfreeze_timestamp"
+    ])
+
+    from core.utils.hikvision import sync_hikvision_async
+    sync_hikvision_async(membership)
+
+    return membership

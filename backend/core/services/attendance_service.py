@@ -216,7 +216,7 @@ def _get_active_membership(client: Client) -> Optional[Membership]:
         .select_related("plan", "gym")
         .filter(
             client=client,
-            operational_status="ACTIVE",
+            operational_status__in=["ACTIVE", "FROZEN"],
         )
         .order_by("-start_date")
         .first()
@@ -265,6 +265,13 @@ def _validate_membership(membership: Membership):
                 name=membership.client.first_name,
                 days=0,
             ),
+        )
+    
+    if membership.operational_status == "FROZEN":
+        return (
+            False,
+            "membership_frozen",
+            "Tu membresía está congelada. Consulta en recepción."
         )
 
     return True, "", ""

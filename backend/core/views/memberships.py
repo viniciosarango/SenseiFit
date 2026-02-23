@@ -9,6 +9,10 @@ from core.services.memberships import create_membership_service, MembershipError
 from core.services.payments import register_payment
 from .base import CompanyGymScopedViewSet
 from core.services.memberships import activate_membership_now
+from core.services.memberships import (
+    freeze_membership_service,
+    unfreeze_membership_service
+)
 
 
 class MembershipViewSet(CompanyGymScopedViewSet):
@@ -187,5 +191,62 @@ class MembershipViewSet(CompanyGymScopedViewSet):
             serializer = self.get_serializer(updated)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
+        except MembershipError as e:
+            raise ValidationError({"detail": str(e)})
+
+
+    @action(detail=True, methods=["post"], url_path="freeze")
+    def freeze(self, request, pk=None):
+        membership = self.get_object()
+
+        try:
+            updated = freeze_membership_service(
+                membership=membership,
+                requested_by=request.user
+            )
+
+            serializer = self.get_serializer(updated)
+            return Response(serializer.data)
+
+        except MembershipError as e:
+            raise ValidationError({"detail": str(e)})
+        
+
+    @action(detail=True, methods=["post"], url_path="unfreeze")
+    def unfreeze(self, request, pk=None):
+        membership = self.get_object()
+
+        pin = request.data.get("pin")
+        if not pin:
+            raise ValidationError({"detail": "Debe ingresar PIN."})
+
+        try:
+            updated = unfreeze_membership_service(
+                membership=membership,
+                requested_by=request.user,
+                pin=pin
+            )
+
+            serializer = self.get_serializer(updated)
+            return Response(serializer.data)
+
+        except MembershipError as e:
+            raise ValidationError({"detail": str(e)})
+        
+
+
+    @action(detail=True, methods=["post"], url_path="freeze")
+    def freeze(self, request, pk=None):
+        membership = self.get_object()
+        pin = request.data.get("pin")
+
+        try:
+            updated = freeze_membership_service(
+                membership=membership,
+                requested_by=request.user,
+                pin=pin
+            )
+            serializer = self.get_serializer(updated)
+            return Response(serializer.data)
         except MembershipError as e:
             raise ValidationError({"detail": str(e)})

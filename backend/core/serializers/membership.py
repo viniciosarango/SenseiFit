@@ -1,5 +1,7 @@
+from django.utils import timezone
 from rest_framework import serializers
 from core.models import Membership, ClientGym
+
 
 
 class MembershipSerializer(serializers.ModelSerializer):
@@ -9,6 +11,7 @@ class MembershipSerializer(serializers.ModelSerializer):
     plan_name = serializers.ReadOnlyField(source="plan.name")
     plan_type = serializers.ReadOnlyField(source="plan.plan_type")
     gym_name = serializers.ReadOnlyField(source="gym.name")
+    freeze_days_current = serializers.SerializerMethodField()
 
     # Campos de control para el servicio
     paid_amount = serializers.DecimalField(
@@ -46,7 +49,8 @@ class MembershipSerializer(serializers.ModelSerializer):
             "financial_status", "operational_status", "notes",
             "payment_method_id", "is_upgrade",
             "sessions_total", "sessions_consumed", "sessions_remaining",
-            "courtesy_qty",
+            "courtesy_qty","freeze_start_date", "total_freeze_days",
+            "freeze_days_current"
         ]
 
         read_only_fields = [
@@ -54,6 +58,13 @@ class MembershipSerializer(serializers.ModelSerializer):
             "original_price", "final_price", "total_amount", "balance",
             "financial_status", "plan", "sessions_remaining"
         ]
+
+
+    def get_freeze_days_current(self, obj):
+        if obj.operational_status == "FROZEN" and obj.freeze_start_date:
+            today = timezone.localdate()
+            return (today - obj.freeze_start_date).days + obj.total_freeze_days
+        return obj.total_freeze_days
 
     def validate(self, data):
         """

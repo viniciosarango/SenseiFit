@@ -60,6 +60,7 @@ class Membership(models.Model):
     end_date = models.DateField(null=True, blank=True)
     payment_due_date = models.DateField(null=True, blank=True)
 
+    
     # ----------------------
     # PRECIOS
     # ----------------------
@@ -111,6 +112,31 @@ class Membership(models.Model):
 
     courtesy_qty = models.PositiveIntegerField(default=0)
     courtesy_used = models.PositiveIntegerField(default=0)
+
+    # ----------------------
+    # FREEZE CONTROL
+    # ----------------------
+    freeze_start_date = models.DateField(null=True, blank=True)
+    total_freeze_days = models.PositiveIntegerField(default=0)
+
+    freeze_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="freezes_done"
+    )
+
+    unfreeze_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="unfreezes_done"
+    )
+
+    freeze_timestamp = models.DateTimeField(null=True, blank=True)
+    unfreeze_timestamp = models.DateTimeField(null=True, blank=True)
 
     # ============================================================
     # VALIDACIONES PROFESIONALES

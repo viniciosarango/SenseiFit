@@ -31,6 +31,89 @@ const openCancelDialog = (data) => {
     cancelDialog.value = true;
 };
 
+const freezeDialog = ref(false);
+const freezeTarget = ref(null);
+const freezePin = ref('');
+
+const openFreezeDialog = (membership) => {
+    freezeTarget.value = membership;
+    freezePin.value = '';
+    freezeDialog.value = true;
+};
+
+const executeFreeze = async () => {
+    try {
+        await MembershipService.freezeMembership(
+            freezeTarget.value.id,
+            freezePin.value
+        );
+
+        toast.add({
+            severity: 'success',
+            summary: 'Congelada',
+            detail: 'Membresía congelada correctamente',
+            life: 3000
+        });
+
+        freezeDialog.value = false;
+        loadMemberships();
+
+    } catch (error) {
+        const errorMsg = error.response?.data?.detail || 'Error al congelar';
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMsg,
+            life: 4000
+        });
+    }
+};
+
+
+const unfreezeDialog = ref(false);
+const unfreezeData = ref({ id: null, pin: '' });
+
+const getFreezeSeverity = (days) => {
+    if (days >= 30) return 'danger';
+    if (days >= 20) return 'warning';
+    return 'info';
+};
+
+const openUnfreezeDialog = (membership) => {
+    unfreezeData.value = {
+        id: membership.id,
+        pin: ''
+    };
+    unfreezeDialog.value = true;
+};
+
+const executeUnfreeze = async () => {
+    try {
+        await MembershipService.unfreezeMembership(
+            unfreezeData.value.id,
+            unfreezeData.value.pin
+        );
+
+        toast.add({
+            severity: 'success',
+            summary: 'Activada',
+            detail: 'Membresía descongelada correctamente',
+            life: 3000
+        });
+
+        unfreezeDialog.value = false;
+        loadMemberships();
+
+    } catch (error) {
+        const msg = error.response?.data?.detail || 'Error al descongelar';
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: msg,
+            life: 4000
+        });
+    }
+};
 
 
 const viewMembership = (data) => {
@@ -65,6 +148,7 @@ const getStatusSeverity = (status) => {
         case 'ACTIVE': return 'success';
         case 'SCHEDULED': return 'info';
         case 'EXPIRED': return 'danger';
+        case 'FROZEN': return 'warning';
         default: return 'secondary';
     }
 };
@@ -96,7 +180,27 @@ const formatDate = (value) => {
 };
 
 
+const freezeMembership = async (membership) => {
+    try {
+        await MembershipService.freezeMembership(membership.id);
+        toast.add({ severity: 'success', summary: 'Congelada', detail: 'Membresía congelada correctamente', life: 3000 });
+        loadMemberships();
+    } catch (error) {
+        const errorMsg = error.response?.data?.detail || 'Error al congelar';
+        toast.add({ severity: 'error', summary: 'Error', detail: errorMsg, life: 4000 });
+    }
+};
 
+const unfreezeMembership = async (membership) => {
+    try {
+        await MembershipService.unfreezeMembership(membership.id);
+        toast.add({ severity: 'success', summary: 'Activada', detail: 'Membresía reactivada correctamente', life: 3000 });
+        loadMemberships();
+    } catch (error) {
+        const errorMsg = error.response?.data?.detail || 'Error al reactivar';
+        toast.add({ severity: 'error', summary: 'Error', detail: errorMsg, life: 4000 });
+    }
+};
 
 
 
@@ -116,6 +220,33 @@ const executeCancel = async () => {
     }
 };
 
+const activateMembership = async (membership) => {
+    try {
+        const updated = await MembershipService.activateMembership(membership.id);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Activada',
+            detail: 'La membresía ahora está activa.',
+            life: 3000
+        });
+
+        // 🔥 Actualizar lista sin recargar
+        const index = memberships.value.findIndex(m => m.id === updated.id);
+        if (index !== -1) {
+            memberships.value[index] = updated;
+        }
+
+    } catch (error) {
+        const errorMsg = error.response?.data?.detail || 'No se pudo activar';
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMsg,
+            life: 4000
+        });
+    }
+};
 
 </script>
 
@@ -153,7 +284,21 @@ const executeCancel = async () => {
             </Column>
 
             <Column field="client_name" header="Socio" sortable></Column>
+            
             <Column field="plan_name" header="Plan" sortable></Column>
+
+            <Column header="Sesiones">
+                <template #body="slotProps">
+                    <template v-if="slotProps.data.plan_type === 'SESSIONS'">
+                        <span class="font-semibold">
+                            {{ slotProps.data.sessions_remaining }} / {{ slotProps.data.sessions_total }}
+                        </span>
+                    </template>
+                    <template v-else>
+                        —
+                    </template>
+                </template>
+            </Column>
 
             <Column header="Vigencia">
                 <template #body="slotProps">
@@ -162,6 +307,17 @@ const executeCancel = async () => {
                         <i class="pi pi-arrow-right text-xs mx-1 text-500"></i> 
                         {{ slotProps.data.end_date }}
                     </span>
+                </template>
+            </Column>
+
+            <Column header="Días Congelados">
+                <template #body="slotProps">
+                    <Tag 
+                        v-if="slotProps.data.freeze_days_current > 0"
+                        :value="slotProps.data.freeze_days_current + ' días'"
+                        :severity="getFreezeSeverity(slotProps.data.freeze_days_current)"
+                    />
+                    <span v-else>—</span>
                 </template>
             </Column>
 
@@ -201,11 +357,48 @@ const executeCancel = async () => {
             <Column header="Acciones" style="min-width:10rem">
                 <template #body="slotProps">
                     <Button icon="pi pi-eye" outlined rounded class="mr-2" @click="viewMembership(slotProps.data)" />
-                    
+
+                    <Button 
+                        v-if="slotProps.data.operational_status === 'SCHEDULED'"
+                        icon="pi pi-play"
+                        outlined
+                        rounded
+                        severity="info"
+                        class="mr-2"
+                        @click="activateMembership(slotProps.data)"
+                    />
+
                     <template v-if="isSuperuser">
+
+                        <!-- Congelar -->
+                        <Button 
+                            v-if="slotProps.data.operational_status === 'ACTIVE'"
+                            icon="pi pi-pause"
+                            outlined
+                            rounded
+                            severity="warning"
+                            class="mr-2"
+                            @click="openFreezeDialog(slotProps.data)"
+                            title="Congelar"
+                        />
+
+                        <!-- Descongelar -->
+                        <Button 
+                            v-if="slotProps.data.operational_status === 'FROZEN'"
+                            icon="pi pi-play"
+                            outlined
+                            rounded
+                            severity="success"
+                            class="mr-2"
+                            @click="openUnfreezeDialog(slotProps.data)"
+                            title="Reactivar"
+                        />
+
                         <Button icon="pi pi-pencil" outlined rounded severity="success" class="mr-2" @click="editMembership(slotProps.data)" />
                         <Button icon="pi pi-trash" outlined rounded severity="danger" @click="openCancelDialog(slotProps.data)" />
                     </template>
+
+
                 </template>
             </Column>
 
@@ -273,6 +466,49 @@ const executeCancel = async () => {
             <template #footer>
                 <Button label="Abortar" icon="pi pi-times" text @click="cancelDialog = false" />
                 <Button label="Confirmar Cancelación" icon="pi pi-check" severity="danger" @click="executeCancel" />
+            </template>
+        </Dialog>
+
+
+        <Dialog v-model:visible="freezeDialog" modal header="Autorización para Congelar" :style="{ width: '350px' }">
+            <div class="flex flex-column gap-3">
+                <p class="text-sm">Ingresa tu PIN de seguridad para confirmar.</p>
+
+                <div class="flex flex-column gap-1">
+                    <label class="font-bold">PIN</label>
+                    <InputText 
+                        v-model="freezePin" 
+                        type="password" 
+                        placeholder="****" 
+                        class="text-center text-2xl"
+                    />
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Cancelar" icon="pi pi-times" text @click="freezeDialog = false" />
+                <Button label="Confirmar" icon="pi pi-check" severity="warning" @click="executeFreeze" />
+            </template>
+        </Dialog>
+
+        <Dialog v-model:visible="unfreezeDialog" modal header="Autorización para Descongelar" :style="{ width: '350px' }">
+            <div class="flex flex-column gap-3">
+                <p class="text-sm">Ingresa tu PIN para reactivar la membresía.</p>
+
+                <div class="flex flex-column gap-1">
+                    <label class="font-bold">PIN</label>
+                    <InputText 
+                        v-model="unfreezeData.pin"
+                        type="password"
+                        class="text-center text-2xl"
+                        placeholder="****"
+                    />
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Cancelar" text @click="unfreezeDialog = false" />
+                <Button label="Confirmar" severity="success" @click="executeUnfreeze" />
             </template>
         </Dialog>
 
