@@ -9,6 +9,16 @@ import Tooltip from 'primevue/tooltip'
 
 defineExpose({})
 
+const isLoading = ref(true)
+
+onMounted(async () => {
+    try {
+        await loadUserContext()
+    } finally {
+        isLoading.value = false
+    }
+})
+
 const toast = useToast()
 const authStore = useAuthStore()
 
@@ -43,21 +53,38 @@ const puedeCrearMetodo = computed(() => {
    CARGA INICIAL
 ========================= */
 onMounted(async () => {
-    await loadUserContext()
+    try {
+        await loadUserContext()
+    } catch (error) {
+        console.error("Error en el montaje:", error)
+        toast.add({ 
+            severity: 'error', 
+            summary: 'Error de conexión', 
+            detail: 'No se pudo cargar la información del usuario', 
+            life: 5000 
+        })
+    }
 })
 
-async function loadUserContext() {
-    const { data: me } = await api.get('me/')
-    authStore.user = me
 
-    if (me.is_superuser) {
-        await loadCompanies()
-    } else if (me.role === 'ADMIN') {
-        selectedCompany.value = me.company
-        await loadGyms(me.company)
-    } else if (me.role === 'STAFF') {
-        selectedGym.value = me.gym
-        await loadPaymentMethods(me.gym)
+async function loadUserContext() {
+    // Agregamos un try/catch interno para la petición 'me/'
+    try {
+        const { data: me } = await api.get('me/')
+        authStore.user = me
+
+        if (me.is_superuser) {
+            await loadCompanies()
+        } else if (me.role === 'ADMIN') {
+            selectedCompany.value = me.company
+            await loadGyms(me.company)
+        } else if (me.role === 'STAFF') {
+            selectedGym.value = me.gym
+            await loadPaymentMethods(me.gym)
+        }
+    } catch (e) {
+        console.error("Fallo al obtener contexto de usuario", e)
+        throw e // Re-lanzar para que lo atrape onMounted
     }
 }
 
@@ -65,13 +92,30 @@ async function loadUserContext() {
    LOADERS
 ========================= */
 async function loadCompanies() {
-    const { data } = await api.get('companies/')
-    companies.value = data
+    try {
+        const { data } = await api.get('companies/')
+        companies.value = data
+        // Si solo hay una empresa, selecciónala por defecto
+        if (data && data.length === 1) {
+            selectedCompany.value = data[0].id
+        }
+    } catch (error) {
+        console.error("Error cargando empresas:", error)
+    }
 }
 
 async function loadGyms(companyId) {
-    const { data } = await api.get('gyms/', { params: { company: companyId } })
-    gyms.value = data
+    if (!companyId) return
+    try {
+        const { data } = await api.get('gyms/', { params: { company: companyId } })
+        gyms.value = data
+        // Si solo hay un gimnasio, selecciónalo por defecto
+        if (data && data.length === 1) {
+            selectedGym.value = data[0].id
+        }
+    } catch (error) {
+        console.error("Error cargando gimnasios:", error)
+    }
 }
 
 async function loadPaymentMethods(gymId) {
@@ -205,6 +249,9 @@ async function toggleMetodo(method) {
 </script>
 
 <template>
+
+    
+
 <div class="card">
 
     <h2 class="mb-4">Métodos de Pago</h2>
@@ -304,6 +351,15 @@ async function toggleMetodo(method) {
             <Button label="Guardar" severity="success" @click="savePaymentMethod" />
         </template>
     </Dialog>
+
+    <div v-if="isLoading" class="flex justify-content-center align-items-center" style="height: 200px">
+        <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+        <span class="ml-2">Cargando configuración...</span>
+    </div>
+    
+    <div v-else class="card">
+        </div>
+
 
 </div>
 </template>
