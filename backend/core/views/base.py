@@ -15,21 +15,40 @@ class CompanyGymScopedViewSet(viewsets.ModelViewSet):
         queryset = self.queryset
 
         if user.is_superuser:
+            gym_id = self.request.query_params.get("gym")
+
+            if gym_id:
+                try:
+                    gym_id = int(gym_id)
+                    return queryset.filter(gym_id=gym_id)
+                except ValueError:
+                    return queryset.none()
+
             return queryset
 
-        if not user.gym and not user.company:
-            raise PermissionDenied("Usuario sin contexto de empresa.")
-
-        # ADMIN → todos los gyms de su company
+        # 🔒 ADMIN normal (no superuser)
         if user.role == user.Roles.ADMIN:
+            if not user.company:
+                return queryset.none()
+
+            gym_id = self.request.query_params.get("gym")
+
+            if gym_id:
+                return queryset.filter(
+                    gym_id=gym_id,
+                    gym__company=user.company
+                )
+
             return queryset.filter(gym__company=user.company)
 
-        # STAFF → solo su gym
+        # 🔒 STAFF
         if user.role == user.Roles.STAFF:
+            if not user.gym:
+                return queryset.none()
             return queryset.filter(gym=user.gym)
 
-        # CLIENT → solo sus propias memberships
+        # 🔒 CLIENT
         if user.role == user.Roles.CLIENT:
-            return queryset.filter(client__user=user)
+            return queryset.none()
 
         return queryset.none()

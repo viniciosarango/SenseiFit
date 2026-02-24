@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import transaction
 from rest_framework import status, viewsets, permissions
 from rest_framework.decorators import action
@@ -6,12 +7,14 @@ from core.models import Payment, Membership, PaymentMethod
 from core.serializers import PaymentSerializer
 from core.services.payments import register_payment, PaymentError
 from .base import CompanyGymScopedViewSet
+from core.services.payments import void_payment
 
 
 class PaymentViewSet(CompanyGymScopedViewSet):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -61,17 +64,40 @@ class PaymentViewSet(CompanyGymScopedViewSet):
 
     @action(detail=True, methods=['post'])
     def anular(self, request, pk=None):
+
+        payment = self.get_object()
         user = request.user
-        razon = request.data.get("razon", "Anulación por error de registro")
+        razon = request.data.get("razon")
+        pin = request.data.get("pin")
+
+        if not razon:
+            return Response(
+                {"detail": "Debe indicar el motivo de la anulación."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 🔐 VALIDACIÓN DE PIN SOLO PARA STAFF
+        if user.role == user.Roles.STAFF:
+            if not pin:
+                return Response(
+                    {"detail": "PIN requerido para anular pagos."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            if pin != settings.CANCEL_PIN:
+                return Response(
+                    {"detail": "PIN incorrecto."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
         try:
-            # Llamamos al motor de anulación
-            from core.services.payments import void_payment, PaymentError
-            void_payment(payment_id=pk, reason=razon, user=user)
-            
-            return Response({"detail": "Pago anulado y saldo restaurado."}, status=status.HTTP_200_OK)
-
-        except PaymentError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            void_payment(payment_id=payment.id, reason=razon, user=user)
+            return Response(
+                {"detail": "Pago anulado y saldo restaurado."},
+                status=status.HTTP_200_OK
+            )
         except Exception as e:
-            return Response({"detail": f"Error inesperado: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )

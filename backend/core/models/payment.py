@@ -71,9 +71,10 @@ class Payment(models.Model):
         if self.amount <= 0:
             raise ValidationError("El monto del pago debe ser mayor que cero.")
 
-        # 2️⃣ Cliente debe pertenecer al gym
-        if self.client and self.gym and self.client.gym_id != self.gym_id:
-            raise ValidationError("El cliente no pertenece a este gimnasio.")
+        # 2️⃣ Cliente debe estar vinculado al gym (ClientGym)
+        if self.client and self.gym:
+            if not self.client.gym_links.filter(gym_id=self.gym_id).exists():
+                raise ValidationError("El cliente no pertenece a este gimnasio.")
 
         # 3️⃣ Membership coherente
         if self.membership:

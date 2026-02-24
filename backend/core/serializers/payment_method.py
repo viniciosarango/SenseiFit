@@ -11,18 +11,14 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
             'created_at', 'gym', 'gym_name'
         ]
         
-        read_only_fields = ['id', 'gym', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
     def validate_name(self, value):
-        """
-        Regla de Oro: No duplicar nombres de métodos de pago 
-        dentro de la misma sucursal.
-        """
+        
         user = self.context['request'].user
         
-        # Buscamos si ya existe ese nombre para TU gimnasio
         queryset = PaymentMethod.objects.filter(
-            gym=user.gym, 
+            gym = self.initial_data.get("gym") or user.gym,
             name__iexact=value
         )
         

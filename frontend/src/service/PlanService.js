@@ -1,8 +1,8 @@
 import api from '@/service/api';
 
 export const PlanService = {
-    getPlans() {
-        return api.get('plans/').then((res) => res.data);
+    getPlans(params = {}) {
+        return api.get('plans/', { params }).then(res => res.data)
     },
 
     savePlan(plan) {

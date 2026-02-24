@@ -1,33 +1,63 @@
 import api from '@/service/api';
 
 export const PaymentService = {
+
+    // ============================
+    // LISTADO DE PAGOS
+    // ============================
     async getPayments(membershipId = null) {
-        // Quitamos la "/" del inicio para evitar líos con el baseURL
-        let url = 'payments/'; 
+        let url = 'payments/';
         if (membershipId) {
             url += `?membership_id=${membershipId}`;
         }
-        const response = await api.get(url); 
+        const response = await api.get(url);
         return response.data;
     },
 
-    createPayment(paymentData) {
-        return api.post('payments/', paymentData).then(res => res.data);
+    // ============================
+    // DETALLE DE PAGO
+    // ============================
+    async getPayment(id) {
+        const response = await api.get(`payments/${id}/`);
+        return response.data;
     },
 
-    getPaymentMethods() {
-        return [
-            { label: 'Efectivo', value: 'CASH' },
-            { label: 'Transferencia', value: 'TRANSFER' },
-            { label: 'Tarjeta', value: 'CARD' }
-        ];
-    },
-    
-    async voidPayment(id, razon) {
-        return api.post(`payments/${id}/anular/`, { razon }).then(res => res.data);
+    // ============================
+    // CREAR PAGO
+    // ============================
+    async createPayment(paymentData) {
+        const response = await api.post('payments/', paymentData);
+        return response.data;
     },
 
+    // ============================
+    // ANULAR PAGO
+    // ============================
+    async voidPayment(id, razon, pin = null) {
+        const payload = { razon }
+        if (pin) payload.pin = pin
+
+        return api.post(`payments/${id}/anular/`, payload)
+            .then(res => res.data)
+    },
+
+    // ============================
+    // OBTENER MÉTODOS DE PAGO (REAL DEL BACKEND)
+    // ============================
+    async getPaymentMethods(gymId = null) {
+        let url = 'payment-methods/';
+        if (gymId) {
+            url += `?gym=${gymId}`;
+        }
+        const response = await api.get(url);
+        return response.data;
+    },
+
+    // ============================
+    // DETALLE DE MEMBRESÍA
+    // ============================
     async getMembershipDetails(id) {
-        return api.get(`memberships/${id}/`).then(res => res.data);
+        const response = await api.get(`memberships/${id}/`);
+        return response.data;
     }
 };

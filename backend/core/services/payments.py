@@ -58,10 +58,10 @@ def register_payment(
         #created_by=created_by,
     )
 
-    # 3. LÓGICA DE NEGOCIO (Fechas de Compromiso)
-    # El 'Sensor' ya actualizó los montos y el financial_status. 
-    # Aquí solo nos encargamos de la fecha de vencimiento si queda deuda.
-    membership.refresh_from_db() # Traemos los montos frescos calculados por el sensor
+    # 🔥 Actualizar dinero en la membresía
+    membership.paid_amount += amount
+    membership.save()
+
     
     if set_due_days is None:
         # Si no enviaron un valor desde el front, usamos el del Gimnasio
@@ -74,9 +74,6 @@ def register_payment(
         membership.payment_due_date = timezone.now().date() + timedelta(days=grace_days)
     else:
         membership.payment_due_date = None
-
-    if amount > membership.balance:
-        raise PaymentError(f"No puedes cobrar ${amount}. El saldo pendiente es solo de ${membership.balance}.")
 
     membership.save(update_fields=["payment_due_date"])
 
@@ -92,7 +89,7 @@ def void_payment(*, payment_id: int, reason: str, user):
     except Payment.DoesNotExist:
         raise PaymentError("El pago no existe en el búnker.")
 
-    if payment.status == 'Anulado':
+    if payment.status == 'VOID':
         raise PaymentError("Este pago ya ha sido anulado.")
 
     membership = payment.membership
@@ -109,7 +106,7 @@ def void_payment(*, payment_id: int, reason: str, user):
         membership.save()
 
     # Marcamos el recibo como anulado y dejamos rastro
-    payment.status = 'Anulado'
+    payment.status = 'VOID'
     timestamp = timezone.now().strftime("%Y-%m-%d %H:%M")
     payment.notes = f"{payment.notes or ''}\n--- ANULADO [{timestamp}] POR {user.username}: {reason} ---"
     payment.save()

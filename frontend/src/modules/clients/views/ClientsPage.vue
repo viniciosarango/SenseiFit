@@ -72,20 +72,27 @@ const paymentMethods = ref([]);
 
 onMounted(async () => {
   loadClients()
-  loadPlans()
-  loadPaymentMethods()
 
   try {
     const { data: me } = await api.get('me/')
+    authStore.user = me
 
     // 🔥 SUPERUSER
     if (me.is_superuser) {
       await loadCompanies()
+      // NO cargamos planes aquí
     }
 
-    // 🔒 ADMIN normal
+    // 🔒 ADMIN
     else if (me.role === 'ADMIN') {
       await loadGyms()
+      // tampoco cargamos planes todavía
+    }
+
+    // 👩‍💼 SECRETARIA / STAFF
+    else {
+      membership.value.gym_id = me.gym
+      await loadPlans(me.gym)
     }
 
   } catch (error) {
@@ -94,9 +101,15 @@ onMounted(async () => {
 })
 
 
-async function loadPaymentMethods() {
+
+async function loadPaymentMethods(gymId = null) {
+    if (!gymId) {
+        paymentMethods.value = []
+        return
+    }
+
     try {
-        paymentMethods.value = await PaymentMethodService.getPaymentMethods();
+        paymentMethods.value = await PaymentMethodService.getPaymentMethods({ gym: gymId })
     } catch (error) {
         console.error("Error cargando métodos de pago:", error);
     }
@@ -116,6 +129,13 @@ const selectedClient = ref(null)
 const deleteClientDialog = ref(false);
 const membershipDialog = ref(false);
 const membership = ref({});
+
+watch(() => membership.value.gym_id, async (newGym) => {
+    if (newGym) {
+        await loadPlans(newGym)
+        await loadPaymentMethods(newGym)
+    }
+})
 
 const selectedPlanData = computed(() => {
     return plans.value.find(p => p.id === membership.value.plan_id) || null;
@@ -164,25 +184,42 @@ function editClient(clientData) {
 const plans = ref([]);
 
 
-async function loadPlans() {
-    plans.value = await PlanService.getPlans();
+async function loadPlans(gymId = null) {
+    if (!gymId) {
+        plans.value = []
+        return
+    }
+
+    try {
+        plans.value = await PlanService.getPlans({ gym: gymId })
+    } catch (error) {
+        console.error("Error cargando planes:", error)
+    }
 }
 
 
-// 🎟️ NUEVA MEMBRESÍA (Disparador)
 function openNewMembership(clientData) {
     membership.value = {
         client: clientData.id,
         client_name: clientData.full_name,
+        company_id: authStore.user?.company || null,
+        gym_id: authStore.user?.gym || null,
         plan_id: null,
         start_date: new Date(),
         paid_amount: 0,
-        enrollment_fee_applied: 0,       
-        discount_percent_applied: 0,    
+        enrollment_fee_applied: 0,
+        discount_percent_applied: 0,
         courtesy_qty: 0,
-        payment_method_id: 1,
+        payment_method_id: null,
         notes: ''
     };
+
+    // 🔥 Si ya hay gym definido (staff o admin)
+    if (membership.value.gym_id) {
+        loadPaymentMethods(membership.value.gym_id);
+        loadPlans(membership.value.gym_id);
+    }
+
     membershipDialog.value = true;
 }
 
@@ -305,9 +342,21 @@ async function saveMembership() {
 
     const dataToSend = { ...membership.value };
 
+    if (authStore.user?.is_superuser) {
+        dataToSend.company = membership.value.company_id;
+        dataToSend.gym = membership.value.gym_id;
+    } 
+    else if (authStore.user?.role === 'ADMIN') {
+        dataToSend.gym = membership.value.gym_id;
+    } 
+    else {
+        dataToSend.gym = authStore.user.gym;
+    }
+
+
+
     if (membership.value.start_date) {
         const d = new Date(membership.value.start_date);
-        // Formateamos manualmente para evitar desfases de zona horaria
         const year = d.getFullYear();
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
@@ -318,6 +367,16 @@ async function saveMembership() {
 
     if (recibido > totalActual) {
         dataToSend.paid_amount = totalActual;
+    }
+
+    if (authStore.user?.is_superuser && (!membership.value.company_id || !membership.value.gym_id)) {
+        toast.add({ severity: 'warn', summary: 'Atención', detail: 'Seleccione empresa y sucursal', life: 3000 });
+        return;
+    }
+
+    if (authStore.user?.role === 'ADMIN' && !membership.value.gym_id) {
+        toast.add({ severity: 'warn', summary: 'Atención', detail: 'Seleccione sucursal', life: 3000 });
+        return;
     }
 
     try {
@@ -366,6 +425,31 @@ async function saveMembership() {
                         <span class="block text-xs text-primary-700 uppercase font-bold">Socio</span>
                         <span class="text-lg font-bold">{{ membership.client_name }}</span>
                     </div>
+                </div>
+
+                <!-- SUPERUSER: Empresa -->
+                <div v-if="authStore.user?.is_superuser">
+                    <label class="font-bold block mb-2">Empresa</label>
+                    <Select
+                        v-model="membership.company_id"
+                        :options="companies"
+                        optionLabel="name"
+                        optionValue="id"
+                        placeholder="Seleccione empresa"
+                        @change="loadGyms(membership.company_id)"
+                    />
+                </div>
+
+                <!-- SUPERUSER y ADMIN: Gym -->
+                <div v-if="authStore.user?.is_superuser || authStore.user?.role === 'ADMIN'">
+                    <label class="font-bold block mb-2">Sucursal (Gym)</label>
+                    <Select
+                        v-model="membership.gym_id"
+                        :options="gyms"
+                        optionLabel="name"
+                        optionValue="id"
+                        placeholder="Seleccione sucursal"
+                    />
                 </div>
 
                 <div>

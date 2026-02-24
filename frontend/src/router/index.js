@@ -23,6 +23,22 @@ const router = createRouter({
         { path: '/membresias', name: 'membresias', component: () => import('@/views/pages/Membresias.vue') },
         { path: '/planes', name: 'planes', component: () => import('@/views/pages/Plans.vue') },
         { path: '/pagos', name: 'pagos', component: () => import('@/views/pages/Pagos.vue') },
+        {
+            path: '/pagos/:id',
+            name: 'pago-detalle',
+            component: () => import('@/views/pages/PagoDetalle.vue')
+        },
+        {
+            path: '/pagos/:id/editar',
+            name: 'pago-editar',
+            component: () => import('@/views/pages/PagoDetalle.vue') // temporalmente mismo componente
+        },
+        
+        { 
+          path: '/metodos-pago', 
+          name: 'metodos-pago', 
+          component: () => import('@/views/pages/PaymentMethods.vue') 
+        },
 
         { path: '/account', name: 'account', component: () => import('@/views/pages/AccountSettings.vue') },
         { 

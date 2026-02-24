@@ -2,7 +2,7 @@ from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction
-from core.models import Membership, Payment, Plan
+from core.models import Membership, Payment, Plan, PaymentMethod
 from django.db import IntegrityError
 
 from django.core.exceptions import ValidationError
@@ -111,12 +111,21 @@ def create_membership_service(
 
     # 7) Pago inicial y Sincronización
     if paid_amount and payment_method_id:
+
+        try:
+            payment_method = PaymentMethod.objects.get(
+                id=payment_method_id,
+                gym=gym  # 🔥 filtro obligatorio
+            )
+        except PaymentMethod.DoesNotExist:
+            raise MembershipError("El método de pago no pertenece a este gimnasio.")
+
         Payment.objects.create(
             membership=membership,
             gym=gym,
             client=client,
             amount=paid_amount,
-            payment_method_id=payment_method_id,
+            payment_method=payment_method,
             notes=f"Pago inicial membresía {membership.id}",
         )
 

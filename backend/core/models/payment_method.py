@@ -6,10 +6,7 @@ class PaymentMethod(models.Model):
     gym = models.ForeignKey(
         'core.Gym',
         on_delete=models.CASCADE,
-        related_name='payment_methods',
-        null=True,
-        blank=True,
-        help_text="Si es null, es un método global del sistema."
+        related_name='payment_methods'
     )
 
     name = models.CharField(

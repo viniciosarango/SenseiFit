@@ -422,7 +422,17 @@ class InventoryAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Sale)
-admin.site.register(PaymentMethod)
+
+@admin.register(PaymentMethod)
+class PaymentMethodAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "gym",
+        "active",
+        "created_at",
+    )
+
 admin.site.register(Company)
 
 

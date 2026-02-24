@@ -11,6 +11,15 @@ class PlanViewSet(CompanyGymScopedViewSet):
     serializer_class = PlanSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        gym_id = self.request.query_params.get("gym")
+        if gym_id:
+            queryset = queryset.filter(gym_id=gym_id)
+
+        return queryset
+
     def perform_create(self, serializer):
         user = self.request.user
 
