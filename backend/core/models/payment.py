@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from decimal import Decimal
 
 
 class Payment(models.Model):
@@ -36,6 +37,9 @@ class Payment(models.Model):
     )
 
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    balance_before = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    balance_after = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
 
     payment_date = models.DateTimeField(auto_now_add=True)
 

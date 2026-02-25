@@ -26,13 +26,27 @@
                     <span class="text-green-600 font-bold">${{ slotProps.data.amount }}</span>
                 </template>
             </Column>
+            
             <Column field="membership_balance" header="Saldo Restante">
                 <template #body="slotProps">
-                    <span :class="slotProps.data.membership_balance > 0 ? 'text-red-500 font-bold' : 'text-gray-400'">
+                    <!-- Si el pago está ANULADO, no mostramos saldo -->
+                    <span v-if="slotProps.data.status === 'VOID'" class="text-gray-400">
+                        —
+                    </span>
+
+                    <!-- Si está PAGADO, mostramos el saldo actual de la membresía -->
+                    <span
+                        v-else
+                        :class="Number(slotProps.data.membership_balance) > 0
+                            ? 'text-red-500 font-bold'
+                            : 'text-gray-400'"
+                    >
                         ${{ slotProps.data.membership_balance }}
                     </span>
                 </template>
             </Column>
+
+
             <Column field="payment_method_name" header="Método" />
             <Column header="Estado">
                 <template #body="slotProps">
