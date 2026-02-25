@@ -41,10 +41,18 @@ const router = createRouter({
         },
 
         { path: '/account', name: 'account', component: () => import('@/views/pages/AccountSettings.vue') },
+        
         { 
             path: '/mi-portal', 
             name: 'client-portal', 
             component: () => import('@/views/pages/ClientPortal.vue') 
+        },
+
+        {
+          path: '/clientes/:id/historial',
+          name: 'client-history',
+          component: () => import('@/modules/clients/views/ClientHistoryPage.vue'),
+          props: true
         },
 
 

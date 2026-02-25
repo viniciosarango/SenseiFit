@@ -111,22 +111,16 @@ def create_membership_service(
 
     # 7) Pago inicial y Sincronización
     if paid_amount and payment_method_id:
+        # Importación local para evitar errores circulares
+        from core.services.payments import register_payment 
 
-        try:
-            payment_method = PaymentMethod.objects.get(
-                id=payment_method_id,
-                gym=gym  # 🔥 filtro obligatorio
-            )
-        except PaymentMethod.DoesNotExist:
-            raise MembershipError("El método de pago no pertenece a este gimnasio.")
-
-        Payment.objects.create(
-            membership=membership,
-            gym=gym,
-            client=client,
+        # 💸 Usamos el motor oficial para que el RECIBO exista y se vea en el Front
+        register_payment(
+            membership_id=membership.id,
             amount=paid_amount,
-            payment_method=payment_method,
-            notes=f"Pago inicial membresía {membership.id}",
+            payment_method_id=payment_method_id,
+            notes=f"Pago inicial inscripción",
+            created_by=created_by
         )
 
     if membership.start_date and membership.end_date:

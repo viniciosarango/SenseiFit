@@ -4,8 +4,11 @@ from core.models import Membership, ClientGym
 
 
 
+
+
+
 class MembershipSerializer(serializers.ModelSerializer):
-    # Lectura amigable
+    
     client_name = serializers.CharField(source="client", read_only=True)
     client_id_number = serializers.ReadOnlyField(source="client.id_number")
     plan_name = serializers.ReadOnlyField(source="plan.name")
@@ -13,7 +16,8 @@ class MembershipSerializer(serializers.ModelSerializer):
     gym_name = serializers.ReadOnlyField(source="gym.name")
     freeze_days_current = serializers.SerializerMethodField()
 
-    # Campos de control para el servicio
+    
+
     paid_amount = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -86,3 +90,25 @@ class MembershipSerializer(serializers.ModelSerializer):
                 )
 
         return data
+    
+
+
+# --- Al final de core/serializers/membership.py ---
+
+class MembershipHistorySerializer(MembershipSerializer):
+    payments = serializers.SerializerMethodField()
+
+    class Meta(MembershipSerializer.Meta):
+        # Heredamos todos los campos del anterior y añadimos 'payments'
+        fields = MembershipSerializer.Meta.fields + ['payments']
+
+    def get_payments(self, obj):
+        # Importamos AQUÍ adentro para evitar el error de importación circular
+        from core.serializers.payment import PaymentSerializer
+        
+        # Intentamos obtener los pagos. 
+        # Si 'payment_set' falla, probamos con 'payments' (según tu related_name)
+        try:
+            return PaymentSerializer(obj.payment_set.all(), many=True).data
+        except AttributeError:
+            return PaymentSerializer(obj.payments.all(), many=True).data

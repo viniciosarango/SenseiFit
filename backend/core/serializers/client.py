@@ -5,10 +5,14 @@ from core.models.client import Client
 from core.models.membership import Membership
 from django.templatetags.static import static
 from core.models.client_gym import ClientGym
+from django.db.models import Sum
+
+
 
 class ClientSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     membership_info = serializers.SerializerMethodField()
+    outstanding_balance = serializers.SerializerMethodField()
     photo = serializers.ImageField(required=False, allow_null=True)
     photo_url = serializers.SerializerMethodField()
     gyms = serializers.SerializerMethodField()
@@ -34,6 +38,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'photo',
             'photo_url',
             'membership_info',
+            'outstanding_balance',
             'created_at',
             'gyms',
         ]
@@ -80,6 +85,15 @@ class ClientSerializer(serializers.ModelSerializer):
 
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip()
+    
+
+    def get_outstanding_balance(self, obj):
+        # Filtramos todas las membresías de este cliente que tengan saldo > 0
+        total = obj.memberships.filter(
+            balance__gt=0
+        ).aggregate(Sum('balance'))['balance__sum']
+        
+        return float(total) if total else 0.0
 
 
     def get_membership_info(self, obj):

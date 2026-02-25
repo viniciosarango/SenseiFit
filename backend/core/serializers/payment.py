@@ -88,7 +88,8 @@ class PaymentSerializer(serializers.ModelSerializer):
             return f"{obj.client.first_name} {obj.client.last_name}"
         return None
     
-    
+
+
     # ===============================
     # VALIDACIONES
     # ===============================
@@ -101,16 +102,11 @@ class PaymentSerializer(serializers.ModelSerializer):
     def validate(self, data):
         user = self.context['request'].user
         membership = data.get('membership')
-        payment_method = data.get('payment_method')
-
-        if not user.is_superuser:
-            if membership and membership.gym != user.gym:
+        
+        # Si no es SuperUser y no es Admin, validamos que sea de su sucursal
+        if not user.is_superuser and user.role not in ['ADMIN', 'owner']: # Ajusta según tus roles
+             if membership and hasattr(user, 'gym') and membership.gym != user.gym:
                 raise serializers.ValidationError(
-                    {"membership": "No puedes registrar pagos para una membresía de otra sucursal."}
+                    {"membership": "No puedes registrar pagos para otra sucursal."}
                 )
-            if payment_method and payment_method.gym != user.gym:
-                raise serializers.ValidationError(
-                    {"payment_method": "Este método de pago no pertenece a tu sucursal."}
-                )
-
         return data

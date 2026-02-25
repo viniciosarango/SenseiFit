@@ -2,9 +2,10 @@ import api from '@/service/api';
 
 export const MembershipService = {
    
+    // 🎯 CORREGIDO: Cambiamos 'client' por 'client_id' para que coincida con tu Backend
     getClientMemberships(clientId) {
-        return api.get(`memberships/?client=${clientId}`).then((res) => res.data);
-    },
+    return api.get(`memberships/?client_id=${clientId}`).then((res) => res.data);
+},
 
     createMembership(membershipData) {
         return api.post('memberships/', membershipData).then((res) => res.data);
@@ -18,7 +19,6 @@ export const MembershipService = {
         return api.get('memberships/').then((res) => res.data);
     },
 
-    // 🎯 REPARADO: Usamos 'api' y la ruta relativa limpia
     async cancelMembership(id, pin, reason) {
         const response = await api.post(`memberships/${id}/cancel/`, {
             pin: pin,
@@ -32,7 +32,6 @@ export const MembershipService = {
         return response.data;
     },
 
-
     freezeMembership(id, pin) {
         return api.post(`/memberships/${id}/freeze/`, {
             pin: String(pin)
@@ -42,6 +41,4 @@ export const MembershipService = {
     unfreezeMembership(id, pin) {
         return api.post(`/memberships/${id}/unfreeze/`, { pin });
     },
-
-
 };

@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from core.models import Membership, ClientGym, Gym, Company
-from core.serializers import MembershipSerializer
+from core.serializers.membership import MembershipSerializer, MembershipHistorySerializer
 from core.services.memberships import create_membership_service, MembershipError, cancel_membership_service
 from core.services.payments import register_payment
 from .base import CompanyGymScopedViewSet
@@ -21,29 +21,14 @@ class MembershipViewSet(CompanyGymScopedViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-
-        def get_queryset(self):
-            queryset = super().get_queryset()
-
-            f_status = self.request.query_params.get('financial_status')
-            o_status = self.request.query_params.get('operational_status')
-
-            if f_status:
-                queryset = queryset.filter(financial_status__in=f_status.split(','))
-
-            if o_status:
-                queryset = queryset.filter(operational_status=o_status)
-
-            return queryset.select_related('client', 'plan').order_by('-created_at')
-
-
-        # 🟢 ADMIN / STAFF / SUPERUSER → usar blindaje base
         queryset = super().get_queryset()
 
-        # Filtros opcionales por URL
+        client_id = self.request.query_params.get('client_id')
         f_status = self.request.query_params.get('financial_status')
         o_status = self.request.query_params.get('operational_status')
+
+        if client_id:
+            queryset = queryset.filter(client_id=client_id)
 
         if f_status:
             queryset = queryset.filter(financial_status__in=f_status.split(','))
@@ -52,6 +37,30 @@ class MembershipViewSet(CompanyGymScopedViewSet):
             queryset = queryset.filter(operational_status=o_status)
 
         return queryset.select_related('client', 'plan').order_by('-created_at')
+    
+
+    @action(detail=False, methods=['get'], url_path='historial-cliente')
+    def historial_cliente(self, request):
+        client_id = request.query_params.get('client_id')
+        if not client_id:
+            return Response({"detail": "Falta client_id"}, status=400)
+            
+        queryset = self.get_queryset().filter(client_id=client_id)
+        serializer = MembershipHistorySerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='por-cobrar-cliente')
+    def por_cobrar_cliente(self, request):
+        client_id = request.query_params.get('client_id')
+        if not client_id:
+            return Response({"detail": "Falta client_id"}, status=400)
+            
+        queryset = self.get_queryset().filter(
+            client_id=client_id, 
+            financial_status__in=['pending', 'partial']
+        )
+        serializer = MembershipSerializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 
@@ -250,3 +259,4 @@ class MembershipViewSet(CompanyGymScopedViewSet):
             return Response(serializer.data)
         except MembershipError as e:
             raise ValidationError({"detail": str(e)})
+        

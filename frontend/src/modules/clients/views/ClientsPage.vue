@@ -48,19 +48,36 @@ async function loadGyms(companyId = null) {
 
 
 
-const verHistorialPagos = (socio) => {
-    const mId = socio.membership_info?.id;
+// const verHistorialPagos = (socio) => {
+//     const mId = socio.membership_info?.id;
 
-    if (mId) { 
+//     if (mId) { 
+//         router.push({ 
+//             path: '/pagos', 
+//             query: { membership_id: mId, mode: 'history' } 
+//         });
+//     } else {
+//         toast.add({ 
+//             severity: 'warn', 
+//             summary: 'Sin registros', 
+//             detail: 'Este socio no tiene una membresía asociada todavía.', 
+//             life: 3000 
+//         });
+//     }
+// };
+
+const verHistorialPagos = (socio) => {
+    // Usamos el ID del socio directamente para la nueva ruta de historial
+    if (socio.id) { 
         router.push({ 
-            path: '/pagos', 
-            query: { membership_id: mId, mode: 'history' } 
+            name: 'client-history', 
+            params: { id: socio.id } 
         });
     } else {
         toast.add({ 
             severity: 'warn', 
             summary: 'Sin registros', 
-            detail: 'Este socio no tiene una membresía asociada todavía.', 
+            detail: 'Socio no identificado.', 
             life: 3000 
         });
     }

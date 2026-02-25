@@ -5,77 +5,49 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 from core.models import Membership, Payment, PaymentMethod
+from django.db.models import Sum
 
 class PaymentError(Exception):
     pass
 
 @transaction.atomic
-def register_payment(
-    *,
-    membership_id: int,
-    amount,
-    payment_method_id: int,
-    notes: str = "",
-    created_by=None,
-    set_due_days: Optional[int] = None,
-):
+def register_payment(*, membership_id, amount, payment_method_id, notes="", created_by=None):
+    membership = Membership.objects.get(id=membership_id)
     amount = Decimal(str(amount))
 
-    if amount <= 0:
-        raise PaymentError("El monto debe ser mayor a 0.")
-
-    try:
-        # Bloqueamos la fila para que nadie más la toque mientras cobramos
-        membership = (
-            Membership.objects.select_for_update()
-            .select_related("plan", "client", "gym")
-            .get(id=membership_id)
-        )
-    except Membership.DoesNotExist:
-        raise PaymentError("Membresía no encontrada.")
-
-    # 1. Validación de Saldo
-    if membership.balance <= 0:
-        raise PaymentError("Esta membresía ya está cancelada (Pagado).")
-
-    if amount > membership.balance:
-        raise PaymentError(f"El monto excede el saldo pendiente (${membership.balance}).")
-
-    try:
-        method = PaymentMethod.objects.get(id=payment_method_id)
-    except PaymentMethod.DoesNotExist:
-        raise PaymentError("Método de pago inválido o no existe.")
-
-    # 2. CREACIÓN DEL RECIBO (Dispara el Sensor de Honestidad)
+    # 1. CREAR EL PAGO PRIMERO (Para que exista en la DB)
     payment = Payment.objects.create(
         membership=membership,
-        gym=membership.gym,     # Agregamos gym para reportes directos
-        client=membership.client, # Agregamos client para historial rápido
+        gym=membership.gym,
+        client=membership.client,
         amount=amount,
-        payment_method=method,
-        #status="Pagado",        # En español
-        notes=notes or "",
-        #created_by=created_by,
+        payment_method_id=payment_method_id,
+        notes=notes,
+        created_by=created_by
     )
 
-    # 🔥 Actualizar dinero en la membresía
-    membership.paid_amount += amount
-    membership.save()
+    # 2. CALCULAR EL TOTAL REAL DESDE LA DB
+    total_pagado = Payment.objects.filter(
+        membership=membership,
+        status='PAID'
+    ).aggregate(Sum('amount'))['amount__sum'] or Decimal('0.00')
 
+    # 3. VALIDACIÓN ANTI-EXCESO (Después de sumar)
+    # Si la suma de pagos supera el precio del plan, hay un error
+    if total_pagado > membership.total_amount:
+        # Opcional: podrías revertir el pago aquí si quieres ser estricto
+        raise PaymentError(f"El pago total (${total_pagado}) excede el precio del plan (${membership.total_amount}).")
+
+    # 4. ACTUALIZAR MEMBRESÍA
+    membership.paid_amount = total_pagado
     
-    if set_due_days is None:
-        # Si no enviaron un valor desde el front, usamos el del Gimnasio
-        grace_days = membership.gym.default_payment_grace_days
-    else:
-        grace_days = set_due_days
-
-
+    # Lógica de fechas de gracia
     if membership.balance > 0:
-        membership.payment_due_date = timezone.now().date() + timedelta(days=grace_days)
+        membership.payment_due_date = timezone.localdate() + timedelta(days=7)
     else:
         membership.payment_due_date = None
-
-    membership.save(update_fields=["payment_due_date"])
+        
+    membership.save() # Esto recalcula el balance automáticamente
 
     return payment, membership
 
