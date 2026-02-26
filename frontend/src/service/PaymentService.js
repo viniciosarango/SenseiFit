@@ -5,13 +5,10 @@ export const PaymentService = {
     // ============================
     // LISTADO DE PAGOS
     // ============================
-    async getPayments(membershipId = null) {
-        let url = 'payments/';
-        if (membershipId) {
-            url += `?membership_id=${membershipId}`;
-        }
-        const response = await api.get(url);
-        return response.data;
+    async getPayments(params = {}) {
+        // params puede traer: { membership_id, status, include_void, gym, etc. }
+        const response = await api.get('payments/', { params })
+        return response.data
     },
 
     // ============================
@@ -44,13 +41,24 @@ export const PaymentService = {
     // ============================
     // OBTENER MÉTODOS DE PAGO (REAL DEL BACKEND)
     // ============================
-    async getPaymentMethods(gymId = null) {
-        let url = 'payment-methods/';
-        if (gymId) {
-            url += `?gym=${gymId}`;
-        }
-        const response = await api.get(url);
-        return response.data;
+    // async getPaymentMethods(gymId = null) {
+    //     let url = 'payment-methods/';
+    //     if (gymId) {
+    //         url += `?gym=${gymId}`;
+    //     }
+    //     const response = await api.get(url);
+    //     return response.data;
+    // },
+
+    async getPaymentMethods(paramsOrGym = null) {
+    // Soporta: getPaymentMethods(1)  ó  getPaymentMethods({ gym: 1 })
+    const params =
+        typeof paramsOrGym === 'number'
+        ? { gym: paramsOrGym }
+        : (paramsOrGym || {})
+
+    const response = await api.get('payment-methods/', { params })
+    return response.data
     },
 
     // ============================

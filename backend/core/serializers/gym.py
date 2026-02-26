@@ -17,7 +17,8 @@ class GymSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'company', 'company_name', 'name', 'address', 
             'phone', 'is_active', 'total_clients', 
-            'active_memberships_count', 'created_at'
+            'active_memberships_count', 'created_at',
+            "default_payment_grace_days",
         ]
         
         # 🎯 BLOQUEO MAESTRO:

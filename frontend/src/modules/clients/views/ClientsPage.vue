@@ -220,7 +220,10 @@ function openNewMembership(clientData) {
         discount_percent_applied: 0,
         courtesy_qty: 0,
         payment_method_id: null,
-        notes: ''
+        notes: '',
+        sale_type: 'CASH',
+        payment_grace_days_override: null,
+        pin: '',
     };
 
     // 🔥 Si ya hay gym definido (staff o admin)
@@ -233,8 +236,15 @@ function openNewMembership(clientData) {
 }
 
 function onPlanChange() {
+
+    if (!membership.value.plan_id) return
+
     if (membership.value.plan_id) {
-        membership.value.paid_amount = 0;
+        if (membership.value.sale_type === 'CASH') {
+        membership.value.paid_amount = totalToPay.value
+        } else {
+        membership.value.paid_amount = 0
+        }
     }
 }
 
@@ -389,6 +399,10 @@ async function saveMembership() {
         return;
     }
 
+    if (!(authStore.user?.role === 'STAFF' && (dataToSend.sale_type === 'CREDIT' || dataToSend.payment_grace_days_override))) {
+        delete dataToSend.pin
+    }
+
     try {
         await MembershipService.createMembership(dataToSend);
         toast.add({ severity: 'success', summary: 'Venta Confirmada', detail: 'Membresía activada', life: 3000 });
@@ -396,7 +410,19 @@ async function saveMembership() {
         loadClients();
     } catch (error) {
         console.error("Error al enviar:", error.response?.data);
-        toast.add({ severity: 'error', summary: 'Error', detail: 'Fallo al procesar venta', life: 3000 });
+        const data = error.response?.data
+        const msg =
+        data?.pin ||
+        data?.client ||
+        data?.detail ||
+        'Fallo al procesar venta'
+
+        toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: msg,
+        life: 4000
+        })
     }
 }
 
@@ -423,6 +449,15 @@ function confirmReactivateClient(clientData) {
       life: 3000
     })
   })
+}
+
+function onSaleTypeChange(type) {
+  membership.value.sale_type = type
+  if (type === 'CREDIT') {
+    membership.value.paid_amount = 0
+  } else {
+    membership.value.payment_grace_days_override = null
+  }
 }
 
 
@@ -558,6 +593,48 @@ function confirmReactivateClient(clientData) {
                         class="w-full shadow-sm"
                     />
                 </div>
+
+                <div class="mb-3">
+                    <label class="font-bold block mb-2 text-xs uppercase text-gray-500">Tipo de venta</label>
+                    <div class="flex gap-2">
+                        <Button
+                        label="Contado"
+                        :outlined="membership.sale_type !== 'CASH'"
+                        @click="onSaleTypeChange('CASH')"
+                        />
+                        <Button
+                        label="Crédito"
+                        :outlined="membership.sale_type !== 'CREDIT'"
+                        @click="onSaleTypeChange('CREDIT')"
+                        />
+                    </div>
+                </div>
+
+                <div v-if="membership.sale_type === 'CREDIT'" class="mb-3">
+                    <label class="font-bold block mb-2 text-xs uppercase text-gray-500">Días de plazo</label>
+                    <InputNumber
+                        v-model="membership.payment_grace_days_override"
+                        showButtons
+                        :min="1"
+                        :max="365"
+                        placeholder="Ej: 15"
+                        class="w-full"
+                    />
+                    <small class="text-gray-500">Si no ingresas nada, se usa el valor por defecto del gym.</small>
+                </div>
+
+                <div
+                    v-if="authStore.user?.role === 'STAFF' && (membership.sale_type === 'CREDIT' || membership.payment_grace_days_override)"
+                    class="mb-3"
+                    >
+                    <label class="font-bold block mb-2 text-xs uppercase text-gray-500">PIN de autorización</label>
+                    <InputText
+                        v-model="membership.pin"
+                        type="password"
+                        placeholder="Ingrese PIN"
+                        class="w-full"
+                    />
+                    </div>
 
                 <label class="font-bold block mb-2 text-center text-sm uppercase text-gray-600">Dinero Entregado ($)</label>
                 <InputNumber 

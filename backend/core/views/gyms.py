@@ -1,8 +1,13 @@
+from django.conf import settings
+from rest_framework.response import Response
+from rest_framework import status
+
 from rest_framework import viewsets, permissions
 from rest_framework.exceptions import PermissionDenied
 
 from core.models import Gym
 from core.serializers import GymSerializer
+
 
 
 class GymViewSet(viewsets.ModelViewSet):
@@ -31,6 +36,7 @@ class GymViewSet(viewsets.ModelViewSet):
         # 🔒 ADMIN y STAFF → solo su empresa
         return queryset.filter(company=user.company)
 
+
     def perform_create(self, serializer):
         user = self.request.user
 
@@ -38,3 +44,26 @@ class GymViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Usuario sin empresa asignada.")
 
         serializer.save(company=user.company)
+
+
+    def partial_update(self, request, *args, **kwargs):
+        user = request.user
+        instance = self.get_object()
+
+        # STAFF: solo puede editar default_payment_grace_days con PIN y solo en su gym
+        if user.role == user.Roles.STAFF:
+            if not user.gym or instance.id != user.gym.id:
+                return Response({"detail": "No autorizado."}, status=status.HTTP_403_FORBIDDEN)
+
+            pin = request.data.get("pin")
+            if not pin or str(pin) != str(getattr(settings, "CANCEL_PIN", "")):
+                return Response({"detail": "PIN incorrecto o faltante."}, status=status.HTTP_403_FORBIDDEN)
+
+            # solo permitir este campo
+            if set(request.data.keys()) - {"default_payment_grace_days", "pin"}:
+                return Response({"detail": "Solo puede modificar el plazo de gracia."}, status=status.HTTP_400_BAD_REQUEST)
+
+            return super().partial_update(request, *args, **kwargs)
+
+        # ADMIN/SUPERUSER: normal (según tu CompanyGymScopedViewSet y permisos actuales)
+        return super().partial_update(request, *args, **kwargs)

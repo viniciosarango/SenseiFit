@@ -1,7 +1,13 @@
 <template>
     <div class="card">
-        <div class="flex justify-content-between align-items-center mb-4">
+        <div class="flex align-items-center justify-content-between mb-4">
             <h2 class="m-0">Gestión de Caja</h2>
+
+            <div class="flex gap-2 ml-3">
+                <Button label="Pagados" :outlined="paymentStatus !== 'paid'" @click="paymentStatus = 'paid'" />
+                <Button label="Anulados" :outlined="paymentStatus !== 'void'" @click="paymentStatus = 'void'" />
+                <Button label="Todos" :outlined="paymentStatus !== 'all'" @click="paymentStatus = 'all'" />
+            </div>
         </div>
 
         <DataTable :value="payments" paginator :rows="10" :loading="loading" class="p-datatable-sm">
@@ -163,54 +169,89 @@ const newPayment = ref({
     notes: ''
 })
 
+const paymentStatus = ref('paid') // 'paid' | 'void' | 'all'
+
+watch(paymentStatus, () => loadPayments())
+
 // --- CARGA DE DATOS ---
 
+// const loadPayments = async () => {
+//     loading.value = true
+//     try {
+//         payments.value = await PaymentService.getPayments()
+//     } catch (e) {
+//         toast.add({ severity: 'error', summary: 'Error', detail: 'Error al cargar pagos' })
+//     } finally {
+//         loading.value = false
+//     }
+// }
+
+
 const loadPayments = async () => {
-    loading.value = true
-    try {
-        payments.value = await PaymentService.getPayments()
-    } catch (e) {
-        toast.add({ severity: 'error', summary: 'Error', detail: 'Error al cargar pagos' })
-    } finally {
-        loading.value = false
+  loading.value = true
+  try {
+    const params = {}
+
+    // Si vienes desde /pagos?membership_id=xxx
+    if (membershipId.value) params.membership_id = membershipId.value
+
+    // Filtros por estado (PAID / VOID / ALL)
+    if (paymentStatus.value === 'paid') {
+      params.status = 'PAID'
+    } else if (paymentStatus.value === 'void') {
+      params.status = 'VOID'
+      params.include_void = 1
+    } else if (paymentStatus.value === 'all') {
+      params.include_void = 1
     }
+
+    payments.value = await PaymentService.getPayments(params)
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Error al cargar pagos' })
+  } finally {
+    loading.value = false
+  }
 }
 
+
 const loadChargeContext = async (mId) => {
-    try {
-        // 1. Obtener info de la membresía
-        const info = await PaymentService.getMembershipDetails(mId);
-        membershipInfo.value = info;
+  try {
+    // 1) Obtener info de la membresía
+    const info = await PaymentService.getMembershipDetails(mId)
+    membershipInfo.value = info
 
-        // 2. Extraer el ID del gimnasio de forma segura
-        // Si info.gym es un objeto {id: 3}, usamos id; si es solo el número 3, lo usamos directo.
-        const gymId = (info.gym && typeof info.gym === 'object') ? info.gym.id : info.gym;
+    // 2) gymId SIEMPRE número (evita [object Object])
+    const rawGym = info?.membership_gym ?? info?.gym
+    const gymId = Number(rawGym?.id ?? rawGym)
 
-        if (!gymId) {
-            console.error("No se encontró el Gimnasio en la membresía");
-            return;
-        }
-
-        // 3. Carga de métodos de pago (Solo con el gymId para no complicar al SuperUser)
-        const params = { gym: gymId };
-        const response = await PaymentService.getPaymentMethods(params);
-        methods.value = response;
-
-        // 4. Preparar formulario
-        newPayment.value = {
-            membership: mId,
-            amount: info.balance, // Aquí cargamos los $9.00 pendientes
-            payment_method: null,
-            gym: gymId,
-            client: info.client // Aseguramos que el cliente viaje al backend
-        };
-
-        showChargeDialog.value = true;
-    } catch (error) {
-        console.error("Error al abrir el modal de cobro:", error);
+    // 3) Preparar formulario (siempre)
+    newPayment.value = {
+      membership: mId,
+      amount: info.balance,
+      payment_method: null,
+      gym: Number.isFinite(gymId) ? gymId : null,
+      client: info.client
     }
-};
 
+    // 4) Abrir modal SIEMPRE (aunque falle métodos)
+    showChargeDialog.value = true
+
+    // 5) Cargar métodos si hay gymId válido
+    if (!Number.isFinite(gymId)) {
+      methods.value = []
+      return
+    }
+
+    try {
+      methods.value = await PaymentService.getPaymentMethods({ gym: gymId })
+    } catch (e) {
+      methods.value = []
+      console.error('Error cargando métodos de pago:', e)
+    }
+  } catch (error) {
+    console.error('Error al abrir el modal de cobro:', error)
+  }
+}
 
 
 const registrarPago = async () => {
@@ -243,8 +284,10 @@ const registrarPago = async () => {
 
 
 const irACobrar = (id) => {
-    // Al cambiar la query, el watcher se encarga de abrir el modal
-    router.push({ query: { membership_id: id } })
+  router.push({
+    path: '/pagos',
+    query: { ...route.query, membership_id: id }
+  })
 }
 
 

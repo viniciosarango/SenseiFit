@@ -72,14 +72,7 @@ def register_payment(*, membership_id, amount, payment_method_id, notes="", crea
 
 
 
-
-
 def recalc_membership_finance(membership: Membership) -> Membership:
-    """
-    Fuente de verdad:
-    - paid_amount = SUM(Payment.amount WHERE status='PAID' AND membership=membership)
-    - balance/financial_status se recalculan en Membership.save()
-    """
     total_pagado = (
         Payment.objects.filter(membership_id=membership.id, status="PAID")
         .aggregate(s=Sum("amount"))["s"]
@@ -88,18 +81,26 @@ def recalc_membership_finance(membership: Membership) -> Membership:
 
     membership.paid_amount = total_pagado
 
-    # payment_due_date depende de si queda saldo (usa total_pagado, NO membership.balance viejo)
-    provisional_balance = max(Decimal("0.00"), Decimal(str(membership.total_amount)) - total_pagado)
+    provisional_balance = max(
+        Decimal("0.00"),
+        Decimal(str(membership.total_amount)) - total_pagado
+    )
+
     if provisional_balance > 0:
-        grace_days = membership.gym.default_payment_grace_days
-        membership.payment_due_date = timezone.localdate() + timedelta(days=grace_days)
+        grace_days = membership.payment_grace_days_override or membership.gym.default_payment_grace_days
+
+        base_date = (
+            membership.start_date
+            if membership.operational_status == "SCHEDULED" and membership.start_date
+            else timezone.localdate()
+        )
+
+        membership.payment_due_date = base_date + timedelta(days=grace_days)
     else:
         membership.payment_due_date = None
 
     membership.save()  # recalcula balance + financial_status internamente
     return membership
-
-
 
 
 

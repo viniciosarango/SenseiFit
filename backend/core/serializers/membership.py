@@ -4,9 +4,6 @@ from core.models import Membership, ClientGym
 
 
 
-
-
-
 class MembershipSerializer(serializers.ModelSerializer):
     
     client_name = serializers.CharField(source="client", read_only=True)
@@ -15,8 +12,6 @@ class MembershipSerializer(serializers.ModelSerializer):
     plan_type = serializers.ReadOnlyField(source="plan.plan_type")
     gym_name = serializers.ReadOnlyField(source="gym.name")
     freeze_days_current = serializers.SerializerMethodField()
-
-    
 
     paid_amount = serializers.DecimalField(
         max_digits=10,
@@ -54,7 +49,7 @@ class MembershipSerializer(serializers.ModelSerializer):
             "payment_method_id", "is_upgrade",
             "sessions_total", "sessions_consumed", "sessions_remaining",
             "courtesy_qty","freeze_start_date", "total_freeze_days",
-            "freeze_days_current"
+            "freeze_days_current", "sale_type", "payment_grace_days_override",
         ]
 
         read_only_fields = [
@@ -70,30 +65,30 @@ class MembershipSerializer(serializers.ModelSerializer):
             return (today - obj.freeze_start_date).days + obj.total_freeze_days
         return obj.total_freeze_days
 
+
     def validate(self, data):
-        """
-        ⚠️ Nota importante:
-        En tu nuevo diseño el gym correcto se determina en la VIEW (por rol).
-        Aquí solo validamos reglas de negocio base, y evitamos client.gym.
-        """
         request = self.context.get("request")
         if not request:
             return data
 
         user = request.user
 
-        # Solo ADMIN puede forzar operational_status
         if "operational_status" in data:
             if not user.is_superuser and user.role != user.Roles.ADMIN:
                 raise serializers.ValidationError(
                     {"operational_status": "No tienes permisos para forzar el estado de la membresía."}
                 )
 
+        if "payment_grace_days_override" in data:
+            val = data.get("payment_grace_days_override")
+            if val is not None and int(val) <= 0:
+                raise serializers.ValidationError(
+                    {"payment_grace_days_override": "Debe ser >= 1 o null para usar el valor por defecto del gym."}
+                )
+
         return data
     
 
-
-# --- Al final de core/serializers/membership.py ---
 
 class MembershipHistorySerializer(MembershipSerializer):
     payments = serializers.SerializerMethodField()

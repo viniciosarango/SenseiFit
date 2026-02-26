@@ -21,12 +21,10 @@ const toast = useToast();
 const cancelDialog = ref(false);
 const cancelData = ref({ id: null, pin: '', reason: '' });
 
-const irAPagar = (membresia) => {
-    router.push({ 
-        path: '/pagos', 
-        query: { membership_id: membresia.id } 
-    });
-};
+const irAPagar = (membershipId) => {
+  router.push({ path: '/pagos', query: { membership_id: membershipId } })
+}
+
 
 const openCancelDialog = (data) => {
     cancelData.value = { id: data.id, pin: '', reason: '' }; 
@@ -358,7 +356,9 @@ const activateMembership = async (membership) => {
                         icon="pi pi-dollar" 
                         severity="success" 
                         rounded 
-                        @click="irAPagar(slotProps.data)" 
+                        
+                        @click="irAPagar(slotProps.data.id)" 
+
                         title="Registrar Pago"
                     />
                 </template>

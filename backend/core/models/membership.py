@@ -27,12 +27,30 @@ class Membership(models.Model):
         ('Pagado', 'Pagado'),
     ]
 
+    SALE_TYPE_CHOICES = [
+        ("CASH", "Contado"),
+        ("CREDIT", "Crédito"),
+    ]
+
+    sale_type = models.CharField(
+        max_length=10,
+        choices=SALE_TYPE_CHOICES,
+        default="CASH"
+    )
+
+    payment_grace_days_override = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Override de días de gracia para esta membresía. Si es null, usa el valor del gym."
+    )
+
     action = models.CharField(
         max_length=20,
         choices=ACTION_CHOICES,
         default="INSCRIPTION",
         verbose_name="Tipo de operación"
     )
+
 
     upgrade_credit = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 

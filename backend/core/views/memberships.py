@@ -70,8 +70,24 @@ class MembershipViewSet(CompanyGymScopedViewSet):
 
         user = request.user
         data = serializer.validated_data
-
         client = data["client"]
+
+        # STAFF: crédito / override requiere PIN
+        if user.role == user.Roles.STAFF:
+            sale_type = request.data.get("sale_type", "CASH")
+            override = request.data.get("payment_grace_days_override")
+
+            needs_pin = (sale_type == "CREDIT") or (override not in [None, "", "null"])
+
+            if needs_pin:
+                from django.conf import settings
+                pin = request.data.get("pin")
+                if not pin or str(pin) != str(getattr(settings, "CANCEL_PIN", "")):
+                    raise ValidationError({"pin": "PIN requerido o incorrecto para venta a crédito / plazo especial."})
+
+        if not client.is_active:
+            raise ValidationError({"client": "Cliente inactivo. Debe reactivarse antes de vender una membresía."})
+        
         plan_id = data["plan_id"]
 
         # 1) Resolver gym según rol (NUEVA ARQUITECTURA)
@@ -136,6 +152,8 @@ class MembershipViewSet(CompanyGymScopedViewSet):
                 payment_method_id=data.get("payment_method_id"),
                 notes=data.get("notes", ""),
                 force_operational_status=data.get("operational_status"),
+                sale_type=data.get("sale_type", "CASH"),
+                payment_grace_days_override=data.get("payment_grace_days_override"),
             )
 
             response_serializer = self.get_serializer(membership)

@@ -16,49 +16,66 @@ class PaymentViewSet(CompanyGymScopedViewSet):
     
 
     def get_queryset(self):
-        queryset = super().get_queryset().select_related("membership")
+        queryset = super().get_queryset()
 
         membership_id = self.request.query_params.get('membership_id')
         if membership_id:
             queryset = queryset.filter(membership_id=membership_id)
 
-        return queryset.order_by('-payment_date')
+        # ✅ Filtro: status=PAID | VOID
+        status_param = self.request.query_params.get('status')
+        if status_param in ['PAID', 'VOID']:
+            queryset = queryset.filter(status=status_param)
 
+        # ✅ Por defecto NO mostrar anulados, a menos que include_void=1
+        include_void = self.request.query_params.get('include_void')
+        if include_void not in ['1', 'true', 'True']:
+            queryset = queryset.exclude(status='VOID')
+
+        return queryset.order_by('-payment_date')
 
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         user = request.user
         data = serializer.validated_data
+        membership = data["membership"]
 
-        # 🛑 FILTRO DE SEGURIDAD SAAS
-        # Validamos que la membresía sea de este gimnasio antes de cobrar
-        membership = data['membership']
-        if not user.is_superuser and membership.gym != user.gym:
-            return Response(
-                {"detail": "No puedes registrar pagos en membresías ajenas."},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # 🛑 FILTRO DE SEGURIDAD SAAS (por rol)
+        # SUPERUSER: libre
+        if user.is_superuser:
+            pass
+
+        # ADMIN: cualquier gym de su company
+        elif user.role == user.Roles.ADMIN:
+            if not user.company or membership.gym.company_id != user.company_id:
+                return Response({"detail": "No autorizado."}, status=status.HTTP_403_FORBIDDEN)
+
+        # STAFF: solo su gym
+        elif user.role == user.Roles.STAFF:
+            if not user.gym or membership.gym_id != user.gym_id:
+                return Response({"detail": "No autorizado."}, status=status.HTTP_403_FORBIDDEN)
+
+        else:
+            return Response({"detail": "No autorizado."}, status=status.HTTP_403_FORBIDDEN)
 
         try:
-            # 💸 Llamada al motor de pagos (Tu Servicio)
+            # 💸 Llamada al motor de pagos
             payment, _ = register_payment(
                 membership_id=membership.id,
-                amount=data['amount'],
-                payment_method_id=data['payment_method'].id,
+                amount=data["amount"],
+                payment_method_id=data["payment_method"].id,
                 notes=request.data.get("notes", ""),
                 created_by=user,
             )
 
-            # Devolvemos el pago serializado
             response_serializer = self.get_serializer(payment)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
         except PaymentError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
 
 
     @action(detail=True, methods=['post'])

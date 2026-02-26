@@ -32,6 +32,8 @@ def create_membership_service(
     created_by=None,
     notes="",
     force_operational_status=None,
+    sale_type="CASH",
+    payment_grace_days_override=None,
 ):
     # 1) Obtener Plan
     try:
@@ -106,7 +108,9 @@ def create_membership_service(
         paid_amount=Decimal("0.00"),
         operational_status=operational_status,
         created_by=created_by,
-        notes=notes,
+        notes=notes,sale_type=sale_type,
+        payment_grace_days_override=payment_grace_days_override,
+
     )
 
     # 7) Pago inicial (si existe)
@@ -156,7 +160,9 @@ def create_membership_service(
 
     # Plazo de pago si quedó deuda
     if membership.balance > 0 and not membership.payment_due_date:
-        membership.payment_due_date = today + timedelta(days=7)
+        grace_days = membership.payment_grace_days_override or membership.gym.default_payment_grace_days
+        base_date = membership.start_date if membership.operational_status == "SCHEDULED" and membership.start_date else today
+        membership.payment_due_date = base_date + timedelta(days=grace_days)
         membership.save(update_fields=['payment_due_date'])
 
     return membership
