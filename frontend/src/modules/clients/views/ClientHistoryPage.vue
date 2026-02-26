@@ -43,10 +43,16 @@ const loadHistory = async () => {
 };
 
 const loadPaymentMethods = async (gymId) => {
-    paymentMethods.value = await PaymentMethodService.getPaymentMethods({ gym: gymId });
-};
+    try {
+        paymentMethods.value = await PaymentMethodService.getPaymentMethods({ gym: gymId })
+    } catch (e) {
+        paymentMethods.value = []
+    }
+}
 
 const openPayment = (data) => {
+    loadPaymentMethods(data.gym);
+
     paymentData.value = {
         membership: data.id,
         amount: parseFloat(data.balance),

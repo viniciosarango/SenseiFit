@@ -4,6 +4,10 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
+from rest_framework import status
+
+from core.services.clients import deactivate_client_service, reactivate_client_service
+
 
 from core.models import Client, Gym
 from core.serializers import ClientSerializer
@@ -26,21 +30,25 @@ class ClientViewSet(CompanyGymScopedViewSet):
     
     def get_queryset(self):
         user = self.request.user
+        status = self.request.query_params.get("status", "active")  # active|inactive|all
+
+        def apply_status(qs):
+            if status == "inactive":
+                return qs.filter(is_active=False)
+            if status == "all":
+                return qs
+            return qs.filter(is_active=True)
 
         if user.is_superuser:
-            return Client.objects.filter(is_active=True)
+            return apply_status(Client.objects.all())
 
         if user.role == user.Roles.ADMIN:
-            return Client.objects.filter(
-                company=user.company,
-                is_active=True
-            )
+            return apply_status(Client.objects.filter(company=user.company))
 
         if user.role == user.Roles.STAFF:
-            return Client.objects.filter(
-                is_active=True,
-                gym_links__gym=user.gym
-            ).distinct()
+            return apply_status(
+                Client.objects.filter(gym_links__gym=user.gym).distinct()
+            )
 
         return Client.objects.none()
 
@@ -192,9 +200,68 @@ class ClientViewSet(CompanyGymScopedViewSet):
             (user.role == user.Roles.STAFF and client.gym_links.filter(gym=user.gym).exists())
         ):
             return Response({"detail": "No autorizado."}, status=403)
-
-        client.is_active = False
-        client.save()
-
+        
+        deactivate_client_service(client=client, requested_by=request.user)
         return Response({"detail": "Cliente desactivado correctamente."})
+    
+
+
+    @action(detail=True, methods=["post"], url_path="reactivate")
+    def reactivate(self, request, pk=None):
+        user = request.user
+
+        try:
+            client = Client.objects.get(pk=pk)  # incluye inactivos
+        except Client.DoesNotExist:
+            return Response({"detail": "Cliente no encontrado."}, status=404)
+
+        # permisos iguales a destroy
+        if not (
+            user.is_superuser or
+            (user.role == user.Roles.ADMIN and client.company_id == user.company_id) or
+            (user.role == user.Roles.STAFF and client.gym_links.filter(gym=user.gym).exists())
+        ):
+            return Response({"detail": "No autorizado."}, status=403)
+        
+        if client.is_active:
+            return Response({"detail": "Cliente ya está activo."}, status=status.HTTP_200_OK)
+
+        reactivate_client_service(client=client, requested_by=user)
+        return Response({"detail": "Cliente reactivado correctamente."}, status=status.HTTP_200_OK)
+    
+
+
+    @action(detail=True, methods=["post"], url_path="deactivate")
+    def deactivate(self, request, pk=None):
+        user = request.user
+
+        try:
+            client = Client.objects.get(pk=pk)  # incluye inactivos
+        except Client.DoesNotExist:
+            return Response({"detail": "Cliente no encontrado."}, status=404)
+
+        # permisos (mismos que destroy)
+        if not (
+            user.is_superuser or
+            (user.role == user.Roles.ADMIN and client.company_id == user.company_id) or
+            (user.role == user.Roles.STAFF and client.gym_links.filter(gym=user.gym).exists())
+        ):
+            return Response({"detail": "No autorizado."}, status=403)
+
+        if not client.is_active:
+            return Response({"detail": "Cliente ya está inactivo."}, status=status.HTTP_200_OK)
+        
+        # PIN solo para STAFF
+        if user.role == user.Roles.STAFF:
+            from django.conf import settings
+            pin = request.data.get("pin")
+            if not pin:
+                return Response({"detail": "PIN requerido."}, status=403)
+            if str(pin) != str(getattr(settings, "CANCEL_PIN", "")):
+                return Response({"detail": "PIN incorrecto."}, status=403)
+
+        from core.services.clients import deactivate_client_service
+        deactivate_client_service(client=client, requested_by=user)
+
+        return Response({"detail": "Cliente desactivado correctamente."}, status=status.HTTP_200_OK)
 

@@ -12,6 +12,12 @@ from core.utils.hikvision import sync_hikvision_async
 class MembershipError(Exception):
     pass
 
+
+from decimal import Decimal
+from datetime import timedelta
+from django.db import transaction
+from django.utils import timezone
+
 @transaction.atomic
 def create_membership_service(
     *,
@@ -34,10 +40,13 @@ def create_membership_service(
         raise MembershipError("El plan seleccionado no existe.")
 
     if plan.gym_id != gym.id:
-            raise MembershipError("El plan no pertenece a este gimnasio.")
+        raise MembershipError("El plan no pertenece a este gimnasio.")
 
     today = timezone.localdate()
     start_date = requested_start_date or today
+
+    # ✅ Guardamos el pago inicial aparte (NO se escribe en membership directo)
+    initial_paid = Decimal(str(paid_amount or 0))
 
     # 2) Buscar membresía actualmente ACTIVA (Seguridad del búnker)
     active_mem = Membership.objects.filter(
@@ -48,7 +57,6 @@ def create_membership_service(
     ).first()
 
     # 3) Lógica de Fila de Renovación
-    # 🎯 Solo buscamos la "última" si NO es un plan de sesiones (Ticketera)
     last_mem = None
     if plan.plan_type == 'TIME':
         last_mem = Membership.objects.filter(
@@ -58,41 +66,33 @@ def create_membership_service(
         ).order_by("-end_date").first()
 
     # 4) DETERMINACIÓN DE ESTADO Y FECHAS
-    
-    # CASO A: El usuario envía un estado forzado (ej: desde el Admin o un switch)
     if force_operational_status:
-        # 🛡️ Candado: No permitimos dos ACTIVAS a la vez
         if force_operational_status == "ACTIVE" and active_mem:
             raise MembershipError(
                 f"El cliente ya tiene una membresía activa (ID: {active_mem.id}). "
                 "No puedes forzar otra como ACTIVA simultáneamente."
             )
         operational_status = force_operational_status
-        action = "INSCRIPTION" 
+        action = "INSCRIPTION"
         start_date = start_date
 
-    # CASO B: Renovación Automática (Cola de espera para planes de tiempo)
     elif last_mem and last_mem.end_date:
         action = "RENEWAL"
         operational_status = "SCHEDULED"
-        # La nueva empieza un día después de que venza la última en cola
         start_date = last_mem.end_date + timedelta(days=1)
-        
-    # CASO C: Inscripción Nueva o Ticketera (Sesiones)
+
     else:
         action = "INSCRIPTION"
-        # Se activa hoy si la fecha coincide, o se programa si es a futuro
         operational_status = "ACTIVE" if start_date <= today else "SCHEDULED"
-        
-        # 🛡️ Candado de respaldo: Si le toca ser ACTIVE pero ya hay una...
+
         if operational_status == "ACTIVE" and active_mem:
-            # La mandamos a la fila como PROGRAMADA para evitar el choque
             operational_status = "SCHEDULED"
 
-    # 5) Calcular fecha de fin basada en la lógica de arriba
+    # 5) Calcular fecha de fin
     end_date = start_date + timedelta(days=plan.duration_days - 1)
 
     # 6) Crear membresía
+    # ✅ paid_amount SIEMPRE 0: el motor de pagos es la única fuente de verdad
     membership = Membership.objects.create(
         client=client,
         gym=gym,
@@ -103,23 +103,24 @@ def create_membership_service(
         original_price=plan.price,
         discount_percent_applied=Decimal(str(discount_percent)),
         enrollment_fee_applied=Decimal(str(enrollment_fee)),
-        paid_amount=Decimal(str(paid_amount or 0)),
+        paid_amount=Decimal("0.00"),
         operational_status=operational_status,
         created_by=created_by,
         notes=notes,
     )
 
-    # 7) Pago inicial y Sincronización
-    if paid_amount and payment_method_id:
-        # Importación local para evitar errores circulares
-        from core.services.payments import register_payment 
+    # 7) Pago inicial (si existe)
+    if initial_paid > 0:
+        if not payment_method_id:
+            raise MembershipError("Debe seleccionar método de pago para registrar el pago inicial.")
 
-        # 💸 Usamos el motor oficial para que el RECIBO exista y se vea en el Front
+        from core.services.payments import register_payment
+
         register_payment(
             membership_id=membership.id,
-            amount=paid_amount,
+            amount=initial_paid,
             payment_method_id=payment_method_id,
-            notes=f"Pago inicial inscripción",
+            notes="Pago inicial inscripción",
             created_by=created_by
         )
 
@@ -132,8 +133,6 @@ def create_membership_service(
     # Reordenar cola TIME si se forzó ACTIVE
     # --------------------------------------------------------
     if force_operational_status == "ACTIVE" and plan.plan_type == "TIME":
-
-        # Buscar TIME programadas futuras
         scheduled_times = Membership.objects.filter(
             client=client,
             gym=gym,

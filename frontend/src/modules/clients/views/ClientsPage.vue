@@ -11,6 +11,7 @@ import { MembershipService } from '@/service/MembershipService';
 import { PaymentMethodService } from '@/service/PaymentMethodService';
 import ClientTable from '../components/ClientTable.vue'
 import api from '@/service/api'
+import { ClientService } from '@/service/ClientService'
 
 import { companyApi } from '../services/company.api'
 import { gymApi } from '../services/gym.api'
@@ -48,24 +49,6 @@ async function loadGyms(companyId = null) {
 
 
 
-// const verHistorialPagos = (socio) => {
-//     const mId = socio.membership_info?.id;
-
-//     if (mId) { 
-//         router.push({ 
-//             path: '/pagos', 
-//             query: { membership_id: mId, mode: 'history' } 
-//         });
-//     } else {
-//         toast.add({ 
-//             severity: 'warn', 
-//             summary: 'Sin registros', 
-//             detail: 'Este socio no tiene una membresía asociada todavía.', 
-//             life: 3000 
-//         });
-//     }
-// };
-
 const verHistorialPagos = (socio) => {
     // Usamos el ID del socio directamente para la nueva ruta de historial
     if (socio.id) { 
@@ -84,11 +67,15 @@ const verHistorialPagos = (socio) => {
 };
 
 
+const irAPagarDesdeCliente = (membershipId) => {
+  if (!membershipId) return
+  router.push({ path: '/pagos', query: { membership_id: membershipId } })
+}
+
 const paymentMethods = ref([]);
 
 
 onMounted(async () => {
-  loadClients()
 
   try {
     const { data: me } = await api.get('me/')
@@ -112,6 +99,8 @@ onMounted(async () => {
       await loadPlans(me.gym)
     }
 
+    loadClients()
+
   } catch (error) {
     console.error('Error obteniendo usuario actual', error)
   }
@@ -134,6 +123,9 @@ async function loadPaymentMethods(gymId = null) {
 
 const toast = useToast();
 const clients = ref([]);
+const clientStatus = ref('active') // active | inactive | all
+
+watch(clientStatus, () => loadClients())
 const dt = ref();
 
 const submitted = ref(false);
@@ -249,7 +241,8 @@ function onPlanChange() {
 
 
 function loadClients() {
-  clientApi.getAll().then((data) => (clients.value = data));
+  ClientService.getClients({ status: clientStatus.value })
+    .then((data) => (clients.value = data))
 }
 
 function openNew() {
@@ -407,6 +400,32 @@ async function saveMembership() {
     }
 }
 
+
+function confirmDeactivateClient(clientData) {
+  api.post(`clients/${clientData.id}/deactivate/`, { pin: prompt('PIN') || '' }).then(() => {
+    loadClients()
+    toast.add({
+      severity: 'success',
+      summary: 'Éxito',
+      detail: 'Cliente desactivado correctamente.',
+      life: 3000
+    })
+  })
+}
+
+function confirmReactivateClient(clientData) {
+  api.post(`clients/${clientData.id}/reactivate/`).then(() => {
+    loadClients()
+    toast.add({
+      severity: 'success',
+      summary: 'Éxito',
+      detail: 'Cliente reactivado correctamente.',
+      life: 3000
+    })
+  })
+}
+
+
 </script>
 
 
@@ -414,14 +433,27 @@ async function saveMembership() {
 
 <template>
     <div class="card">
+
+        <div class="w-full flex justify-end gap-2 mb-3">
+  <Button label="Activos" :outlined="clientStatus !== 'active'" @click="clientStatus='active'" />
+  <Button label="Inactivos" :outlined="clientStatus !== 'inactive'" @click="clientStatus='inactive'" />
+  <Button label="Todos" :outlined="clientStatus !== 'all'" @click="clientStatus='all'" />
+</div>
+
+
         <ClientTable
-            :clients="clients"
-            @new="openNew"
-            @edit="editClient"
-            @delete="confirmDeleteClient"
-            @sell-membership="openNewMembership"
-            @view-history="verHistorialPagos"
+        :clients="clients"
+        :clientStatus="clientStatus"
+        @new="openNew"
+        @edit="editClient"
+        @delete="confirmDeleteClient"
+        @deactivate="confirmDeactivateClient"
+        @sell-membership="openNewMembership"
+        @view-history="verHistorialPagos"
+        @charge="irAPagarDesdeCliente"
+        @reactivate="confirmReactivateClient"
         />
+
         <Dialog v-model:visible="deleteClientDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
             <div class="flex items-center gap-4">
                 <i class="pi pi-exclamation-triangle text-3xl text-red-500" />

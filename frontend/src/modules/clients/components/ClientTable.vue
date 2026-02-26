@@ -1,11 +1,47 @@
 <script setup>
-import { ref } from 'vue'
+import Menu from 'primevue/menu'
+import { ref, computed } from 'vue'
 import { FilterMatchMode } from '@primevue/core/api'
 import { useAuthStore } from '@/store/auth'
 
 const props = defineProps({
-  clients: Array
+  clients: Array,
+  clientStatus: { type: String, default: 'active' } // active|inactive|all
 })
+
+const rowMenuRef = ref()
+const rowTarget = ref(null)
+
+const toggleRowMenu = (event, row) => {
+  rowTarget.value = row
+  rowMenuRef.value.toggle(event)
+}
+
+const rowMenuItems = computed(() => [
+  {
+    label: 'Historial',
+    icon: 'pi pi-history',
+    command: () => emit('view-history', rowTarget.value)
+  },
+  {
+    label: 'Editar',
+    icon: 'pi pi-pencil',
+    command: () => emit('edit', rowTarget.value)
+  },
+  { separator: true },
+  ...(rowTarget.value?.is_active
+    ? [{
+        label: 'Desactivar',
+        icon: 'pi pi-ban',
+        command: () => emit('deactivate', rowTarget.value)
+      }]
+    : [{
+        label: 'Reactivar',
+        icon: 'pi pi-refresh',
+        command: () => emit('reactivate', rowTarget.value)
+      }]
+  )
+])
 
 const authStore = useAuthStore()
 const canSeeGyms = authStore.isSuperuser || authStore.role === 'ADMIN'
@@ -15,7 +51,10 @@ const emit = defineEmits([
   'edit',
   'delete',
   'sell-membership',
-  'view-history'
+  'view-history',
+  'deactivate',
+  'charge',
+  'reactivate'
 ])
 
 const filters = ref({
@@ -108,19 +147,54 @@ const getStatusSeverity = (status) => {
         </template>
       </Column>
 
-      <Column header="Acciones" style="min-width: 14rem">
+      <Column header="Estado">
         <template #body="slotProps">
-          <Button icon="pi pi-ticket" rounded severity="success" class="mr-2" v-tooltip.top="'Vender Membresía'" @click="emit('sell-membership', slotProps.data)" />
-          
-          <Button v-if="slotProps.data.outstanding_balance > 0" icon="pi pi-dollar" rounded severity="warning" class="mr-2" v-tooltip.top="'Cobrar Deuda'" @click="emit('view-history', slotProps.data)" />
-          
-          <Button icon="pi pi-pencil" outlined rounded class="mr-2" v-tooltip.top="'Editar'" @click="emit('edit', slotProps.data)" />
-          
-          <Button icon="pi pi-history" rounded outlined severity="info" class="mr-2" v-tooltip.top="'Historial'" @click="emit('view-history', slotProps.data)" />
-          
-          <Button icon="pi pi-trash" outlined rounded severity="danger" v-tooltip.top="'Eliminar'" @click="emit('delete', slotProps.data)" />
+          <Tag
+            :value="slotProps.data.is_active ? 'ACTIVO' : 'INACTIVO'"
+            :severity="slotProps.data.is_active ? 'success' : 'secondary'"
+          />
         </template>
       </Column>
+
+      <Column header="Acciones" style="min-width: 14rem">
+        <template #body="slotProps">
+          <div class="flex align-items-center gap-2">
+
+            <!-- 1) ACCIÓN PRINCIPAL: VENDER/RENOVAR -->
+            <Button
+              v-if="slotProps.data.is_active"
+              icon="pi pi-ticket"
+              rounded
+              severity="success"
+              v-tooltip.top="'Vender / Renovar'"
+              @click="emit('sell-membership', slotProps.data)"
+            />
+
+            <!-- 2) ACCIÓN SECUNDARIA (SOLO SI HAY DEUDA): COBRAR -->
+            <Button
+              v-if="slotProps.data.is_active && slotProps.data.outstanding_balance > 0 && slotProps.data.membership_info?.id"
+              icon="pi pi-dollar"
+              rounded
+              severity="warning"
+              class="mr-2"
+              v-tooltip.top="'Cobrar Deuda'"
+              @click="emit('charge', slotProps.data.membership_info.id)"
+            />
+
+            <!-- 3) MENÚ: RESTO -->
+            <Button
+              icon="pi pi-ellipsis-v"
+              text
+              rounded
+              v-tooltip.top="'Más acciones'"
+              @click="(e) => toggleRowMenu(e, slotProps.data)"
+            />
+
+            <Menu :model="rowMenuItems" popup ref="rowMenuRef" />
+          </div>
+        </template>
+      </Column>
+    
     </DataTable>
   </div>
 </template>

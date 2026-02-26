@@ -8,7 +8,7 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         # Cargar signals
-        import core.signals
+        #import backend.core.signals
 
         # Evitar doble scheduler en runserver
         if os.environ.get("RUN_MAIN") != "true":

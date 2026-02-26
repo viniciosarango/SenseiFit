@@ -4,6 +4,8 @@ import { ref, onMounted } from 'vue';
 import { MembershipService } from '@/service/MembershipService';
 import { useToast } from 'primevue/usetoast';
 import { useRouter } from 'vue-router';
+import { onBeforeUnmount } from 'vue'
+import { bus, EVENTS } from '@/events/bus'
 const router = useRouter();
 
 // Estado y Datos
@@ -165,6 +167,14 @@ const getFinancialSeverity = (status) => {
 
 onMounted(() => {
     loadMemberships();
+
+    bus.on(EVENTS.PAYMENTS_CHANGED, () => {
+        loadMemberships(); 
+    });
+});
+
+onBeforeUnmount(() => {
+    bus.off(EVENTS.PAYMENTS_CHANGED);
 });
 
 const formatDate = (value) => {

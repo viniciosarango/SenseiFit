@@ -5,7 +5,8 @@ from core.models.client import Client
 from core.models.membership import Membership
 from django.templatetags.static import static
 from core.models.client_gym import ClientGym
-from django.db.models import Sum
+from django.db.models import Sum, Q
+from decimal import Decimal
 
 
 
@@ -41,6 +42,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'outstanding_balance',
             'created_at',
             'gyms',
+            'is_active'
         ]
         
         read_only_fields = [
@@ -88,20 +90,41 @@ class ClientSerializer(serializers.ModelSerializer):
     
 
     def get_outstanding_balance(self, obj):
-        # Filtramos todas las membresías de este cliente que tengan saldo > 0
-        total = obj.memberships.filter(
-            balance__gt=0
-        ).aggregate(Sum('balance'))['balance__sum']
-        
-        return float(total) if total else 0.0
+        # Membresías activas o programadas (las que te importan para deuda)
+        memberships = obj.memberships.filter(
+            operational_status__in=['ACTIVE', 'SCHEDULED']
+        )
+
+        total_amount = memberships.aggregate(
+            total=Sum('total_amount')
+        )['total'] or Decimal('0.00')
+
+        total_paid = memberships.aggregate(
+            paid=Sum('payments__amount', filter=Q(payments__status='PAID'))
+        )['paid'] or Decimal('0.00')
+
+        outstanding = total_amount - total_paid
+        if outstanding < 0:
+            outstanding = Decimal('0.00')
+
+        return float(outstanding)
 
 
     def get_membership_info(self, obj):
         
-        #membership = obj.memberships.filter(operational_status='ACTIVE', ).first()       
+        if not obj.is_active:
+            return {"has_active": False, "message": "Cliente inactivo"}
+        
         membership = obj.memberships.filter(
-            operational_status__in=['ACTIVE', 'SCHEDULED']
-        ).order_by('-operational_status').first()
+            operational_status__in=['ACTIVE', 'SCHEDULED'],
+            balance__gt=0
+        ).order_by('-created_at').first()
+
+        # 2) Si no hay deuda, mostrar la más reciente ACTIVE/SCHEDULED
+        if not membership:
+            membership = obj.memberships.filter(
+                operational_status__in=['ACTIVE', 'SCHEDULED']
+            ).order_by('-created_at').first()
 
         if membership:
             return {
@@ -110,10 +133,11 @@ class ClientSerializer(serializers.ModelSerializer):
                 "status": membership.operational_status,
                 "plan_name": membership.plan.name,
                 "financial_status": membership.financial_status,
-                "balance": float(membership.balance), # Aseguramos formato numérico
+                "balance": float(membership.balance),
                 "due_date": membership.payment_due_date,
                 "end_date": membership.end_date
             }
+
         return {"has_active": False, "message": "Sin Membresía Activa"}
 
     # --- VALIDACIONES PROFESIONALES ---

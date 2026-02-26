@@ -5,9 +5,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from core.models import Payment, Membership, PaymentMethod
 from core.serializers import PaymentSerializer
-from core.services.payments import register_payment, PaymentError
+from core.services.payments import register_payment, void_payment
 from .base import CompanyGymScopedViewSet
-from core.services.payments import void_payment
 
 
 class PaymentViewSet(CompanyGymScopedViewSet):
@@ -17,7 +16,7 @@ class PaymentViewSet(CompanyGymScopedViewSet):
     
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().select_related("membership")
 
         membership_id = self.request.query_params.get('membership_id')
         if membership_id:
@@ -91,6 +90,13 @@ class PaymentViewSet(CompanyGymScopedViewSet):
                 )
 
         try:
+            import inspect
+            real_fn = inspect.unwrap(void_payment)
+            print("VOID_PAYMENT_MODULE:", void_payment.__module__)
+            print("VOID_PAYMENT_REAL_FROM:", inspect.getsourcefile(real_fn))
+            print("VOID_PAYMENT_REAL_NAME:", real_fn.__name__)
+
+            
             void_payment(payment_id=payment.id, reason=razon, user=user)
             return Response(
                 {"detail": "Pago anulado y saldo restaurado."},

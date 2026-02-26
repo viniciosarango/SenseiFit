@@ -1,9 +1,10 @@
 import api from '@/service/api';
 
 export const ClientService = {
-    getClients() {
-        return api.get('clients/').then((res) => res.data);
-    },
+    
+    getClients(params = {}) {
+        return api.get('clients/', { params }).then((res) => res.data);
+        },
 
     saveClient(formData, id = null) {
         if (id) {

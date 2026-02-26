@@ -64,12 +64,12 @@ class PaymentSerializer(serializers.ModelSerializer):
         return None
 
     def get_membership_balance(self, obj):
-        # ✅ mostrar el saldo histórico del pago
-        if hasattr(obj, "balance_after") and obj.balance_after is not None:
-            return obj.balance_after
+        # Caja: saldo ACTUAL. VOID no muestra saldo.
+        if obj.status == "VOID":
+            return None
         if obj.membership:
             return obj.membership.balance
-        return 0
+        return None
 
     def get_membership_gym(self, obj):
         if obj.membership and obj.membership.gym:

@@ -120,6 +120,7 @@
 
 
 <script setup>
+import { bus, EVENTS } from '@/events/bus'
 import { ref, onMounted, computed, watch } from 'vue'
 import { useAuthStore } from '@/store/auth'
 import { PaymentService } from '@/service/PaymentService'
@@ -211,24 +212,6 @@ const loadChargeContext = async (mId) => {
 };
 
 
-// --- ACCIONES ---
-
-// const registrarPago = async () => {
-//     saving.value = true
-//     try {
-//         const created = await PaymentService.createPayment(newPayment.value)
-//         toast.add({ severity: 'success', summary: 'Éxito', detail: 'Pago registrado correctamente' })
-        
-//         showChargeDialog.value = false
-//         await loadPayments()
-//         router.replace({ path: '/pagos' }) // Limpiar el ID de la URL
-//         router.push(`/pagos/${created.id}`) // Ir al recibo
-//     } catch (e) {
-//         toast.add({ severity: 'error', summary: 'Error', detail: e.response?.data?.detail || 'Error al pagar' })
-//     } finally {
-//         saving.value = false
-//     }
-// }
 
 const registrarPago = async () => {
     saving.value = true
@@ -244,6 +227,7 @@ const registrarPago = async () => {
         
         showChargeDialog.value = false
         await loadPayments()
+        bus.emit(EVENTS.PAYMENTS_CHANGED)
         router.replace({ path: '/pagos' }) 
         
     } catch (e) {
@@ -257,10 +241,12 @@ const registrarPago = async () => {
     }
 }
 
+
 const irACobrar = (id) => {
     // Al cambiar la query, el watcher se encarga de abrir el modal
     router.push({ query: { membership_id: id } })
 }
+
 
 const cerrarModalCobro = () => {
     showChargeDialog.value = false
@@ -279,7 +265,8 @@ const confirmarAnulacion = async () => {
         await PaymentService.voidPayment(selectedPayment.value.id, motivo.value, authStore.role === 'STAFF' ? pin.value : null)
         toast.add({ severity: 'success', summary: 'Anulado', detail: 'Pago anulado' })
         showVoidDialog.value = false
-        loadPayments()
+        await loadPayments()
+        bus.emit(EVENTS.PAYMENTS_CHANGED)
     } catch (e) {
         toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo anular' })
     }
