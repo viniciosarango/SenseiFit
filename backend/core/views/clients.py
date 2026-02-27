@@ -11,6 +11,7 @@ from core.services.clients import deactivate_client_service, reactivate_client_s
 
 from core.models import Client, Gym
 from core.serializers import ClientSerializer
+from core.serializers.client_profile import ClientProfileSerializer
 from core.services.client_onboarding_service import (
     create_client_with_user_service,
     ClientOnboardingError
@@ -264,4 +265,13 @@ class ClientViewSet(CompanyGymScopedViewSet):
         deactivate_client_service(client=client, requested_by=user)
 
         return Response({"detail": "Cliente desactivado correctamente."}, status=status.HTTP_200_OK)
+    
+
+    @action(detail=True, methods=["get"], url_path="profile")
+    def profile(self, request, pk=None):
+        # Usa el MISMO objeto que retrieve (respeta permisos + filtros)
+        client = self.get_object()
+
+        serializer = ClientProfileSerializer(client, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
 

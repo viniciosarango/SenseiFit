@@ -1,33 +1,48 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue'
+import AppMenuItem from './AppMenuItem.vue'
 
-import AppMenuItem from './AppMenuItem.vue';
+// Ajusta esta key si tu app guarda el rol con otro nombre
+const role = computed(() => localStorage.getItem('role') || '')
 
-const model = ref([
-    {
-        label: 'Panel de Control',
-        items: [
-            { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' }
-        ]
-    },
-    {
-        label: 'Gestión de Gimnasio',
-        items: [
-            { label: 'Clientes / Socios', icon: 'pi pi-fw pi-users', to: '/clientes' },
-            { label: 'Membresías', icon: 'pi pi-fw pi-id-card', to: '/membresias' },
-            { label: 'Pagos y Caja', icon: 'pi pi-fw pi-money-bill', to: '/pagos' }
-        ]
-    },
-    {
-        label: 'Configuración',
-        items: [
-            { label: 'Planes', icon: 'pi pi-fw pi-list', to: '/planes' },
-            { label: 'Métodos de Pago', icon: 'pi pi-fw pi-wallet', to: '/metodos-pago' }
-        ]
-    }
-]);
+const adminMenu = [
+  {
+    label: 'Panel de Control',
+    items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' }]
+  },
+  {
+    label: 'Gestión de Gimnasio',
+    items: [
+      { label: 'Clientes / Socios', icon: 'pi pi-fw pi-users', to: '/clientes' },
+      { label: 'Membresías', icon: 'pi pi-fw pi-id-card', to: '/membresias' },
+      { label: 'Pagos y Caja', icon: 'pi pi-fw pi-money-bill', to: '/pagos' }
+    ]
+  },
+  {
+    label: 'Configuración',
+    items: [
+      { label: 'Planes', icon: 'pi pi-fw pi-list', to: '/planes' },
+      { label: 'Métodos de Pago', icon: 'pi pi-fw pi-wallet', to: '/metodos-pago' }
+    ]
+  }
+]
 
+const clientMenu = [
+  {
+    label: 'Mi Cuenta',
+    items: [
+      { label: 'Mi Portal', icon: 'pi pi-fw pi-user', to: '/mi-portal' },
+      { label: 'Cuenta', icon: 'pi pi-fw pi-cog', to: '/account' },
+      { label: 'Seguridad', icon: 'pi pi-fw pi-shield', to: '/seguridad' }
+    ]
+  }
+]
+
+// model final: si es CLIENT => menú cliente; caso contrario => menú completo
+const model = computed(() => (role.value === 'CLIENT' ? clientMenu : adminMenu))
 </script>
+
+
 
 <template>
     <ul class="layout-menu">
