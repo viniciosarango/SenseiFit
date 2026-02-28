@@ -1,7 +1,6 @@
 import requests
 from django.conf import settings
-from django.core.mail import EmailMessage, get_connection
-
+from django.core.mail import EmailMessage
 
 
 def send_client_credentials_email(
@@ -11,7 +10,7 @@ def send_client_credentials_email(
     temp_password,
     full_name=None,
     login_url=None,
-    reply_to=None
+    reply_to=None,
 ):
     if not email:
         return
@@ -38,21 +37,23 @@ Dorian Gym
         body=message,
         from_email=settings.DEFAULT_FROM_EMAIL,
         to=[email],
-        reply_to=[reply_to] if reply_to else None,
+        reply_to=[reply_to] if reply_to else ["soporte@senseifit.app"],
     )
 
-    # ✅ NO romper creación de cliente si SMTP está bloqueado/lento en PROD
+    # ✅ NO romper creación de cliente si falla el email
     try:
-        timeout = getattr(settings, "EMAIL_TIMEOUT", 5)
-        conn = get_connection(timeout=timeout)
-        msg.connection = conn
         msg.send(fail_silently=True)
     except Exception:
         pass
-    
 
 
-def send_email_verification_link(*, email, full_name=None, verify_url=None, reply_to=None):
+def send_email_verification_link(
+    *,
+    email,
+    full_name=None,
+    verify_url=None,
+    reply_to=None,
+):
     if not email or not verify_url:
         return
 
@@ -75,18 +76,14 @@ Si tú no solicitaste esto, puedes ignorar este mensaje.
         body=message,
         from_email=settings.DEFAULT_FROM_EMAIL,
         to=[email],
-        reply_to=[reply_to] if reply_to else None,
+        reply_to=[reply_to] if reply_to else ["soporte@senseifit.app"],
     )
 
-    # ✅ NO romper el flujo si SMTP está bloqueado / lento en producción
+    # ✅ NO romper el flujo si falla el email
     try:
-        timeout = getattr(settings, "EMAIL_TIMEOUT", 5)
-        conn = get_connection(timeout=timeout)
-        msg.connection = conn
         msg.send(fail_silently=True)
     except Exception:
         pass
-
 
 
 def send_client_credentials_whatsapp(*, full_name, username, temp_password, login_url=None):
@@ -116,8 +113,8 @@ def send_client_credentials_whatsapp(*, full_name, username, temp_password, logi
         "type": "template",
         "template": {
             "name": template_name,
-            "language": {"code": template_lang}
-        }
+            "language": {"code": template_lang},
+        },
     }
 
     headers = {

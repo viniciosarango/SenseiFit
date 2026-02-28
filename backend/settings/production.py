@@ -61,3 +61,22 @@ SECURE_HSTS_PRELOAD = True
 # =====================================================
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+
+# =====================================================
+# EMAIL (SendGrid Web API)
+# =====================================================
+
+INSTALLED_APPS += ["anymail"]
+
+EMAIL_BACKEND = "anymail.backends.sendgrid.EmailBackend"
+
+ANYMAIL = {
+    "SENDGRID_API_KEY": env("SENDGRID_API_KEY"),
+}
+
+DEFAULT_FROM_EMAIL = env(
+    "DEFAULT_FROM_EMAIL",
+    default="SenseiFit <no-reply@senseifit.app>",
+)
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
