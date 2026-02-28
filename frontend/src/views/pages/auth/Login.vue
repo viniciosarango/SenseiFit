@@ -13,6 +13,8 @@ const errorMsg = ref('')
 const router = useRouter()
 const authStore = useAuthStore()
 
+
+
 const handleLogin = async () => {
   errorMsg.value = ''
   loading.value = true
@@ -99,11 +101,15 @@ const handleLogin = async () => {
                 <label for="rememberme" class="text-sm">Recordarme</label>
               </div>
 
-              <!-- lo dejamos visual, luego definimos flujo real -->
-              <span class="text-sm text-primary cursor-not-allowed opacity-60 select-none">
-                ¿Olvidaste tu contraseña?
-              </span>
-            </div>
+                <RouterLink
+                  to="/auth/forgot-password"
+                  class="text-sm text-primary cursor-pointer select-none"
+                >
+                  ¿Olvidaste tu contraseña?
+                </RouterLink>
+
+              
+              </div>
 
             <Button
               :label="loading ? 'Ingresando…' : 'Ingresar'"

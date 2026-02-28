@@ -46,8 +46,11 @@ const summary = computed(() => payload.value?.summary || null)
         <img :src="client.photo_url" class="border-circle" style="width:70px;height:70px;object-fit:cover" />
         <div>
           <div class="text-xl font-bold">{{ client.first_name }} {{ client.last_name }}</div>
-          <div class="text-sm text-gray-500">
-            {{ client.id_number || '-' }} · {{ client.phone || '-' }} · {{ client.email || '-' }}
+          <div class="mt-2 text-sm text-gray-500">
+            <div><b>N. Identificación:</b> {{ client.id_number || '-' }}</div>
+            <div><b>Teléfono:</b> {{ client.phone || '-' }}</div>
+            <div><b>Email:</b> {{ client.email || '-' }}</div>
+            <div><b>Id. Hikvision:</b> {{ client.hikvision_id || '-' }}</div>
           </div>
         </div>
       </div>

@@ -6,6 +6,18 @@ const router = createRouter({
   routes: [
     { path: '/auth/login', name: 'login', component: () => import('@/views/pages/auth/Login.vue') },
     { path: '/verificar-email', name: 'verify-email', component: () => import('@/views/pages/VerifyEmail.vue') },
+    {
+      path: '/auth/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/views/pages/auth/ForgotPassword.vue'),
+    },
+
+    {
+      path: '/auth/reset-password',
+      name: 'reset-password',
+      component: () => import('@/views/pages/auth/ResetPassword.vue'),
+    },
+        
 
     {
       path: '/',
@@ -78,9 +90,16 @@ const router = createRouter({
 });
 
 router.beforeEach((to, from, next) => {
+    
     const authStore = useAuthStore()
+    const publicRoutes = [
+      '/auth/login',
+      '/verificar-email',
+      '/auth/forgot-password',
+      '/auth/reset-password'
+    ]
 
-    if (!authStore.token && !['/auth/login', '/verificar-email'].includes(to.path)) {
+    if (!authStore.token && !publicRoutes.includes(to.path)) {
       return next('/auth/login')
     }
 

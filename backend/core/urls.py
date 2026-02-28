@@ -7,7 +7,7 @@ from core.views import (
     UserViewSet, GymViewSet, PaymentMethodViewSet,
     PaymentViewSet, AttendanceWebhookView
 )
-
+from core.views.auth import PasswordResetRequestView
 from core.views.access import check_access, access_screen
 from core.views.attendance_screen import last_attendance
 from core.views.auth import MeView, ChangePasswordView
@@ -16,6 +16,7 @@ from core.views.companies import CompanyViewSet
 from core.views.email_verification import SendEmailVerificationView
 from core.views.email_verify_confirm import VerifyEmailTokenView
 from core.views.whatsapp_test import WhatsAppTestView
+from core.views.auth import PasswordResetConfirmView
 
 
 
@@ -56,5 +57,7 @@ urlpatterns = [
     path("api/contact-points/email/send-verification/", SendEmailVerificationView.as_view(), name="send-email-verification"),
     path("api/contact-points/email/verify/", VerifyEmailTokenView.as_view(), name="verify-email-token"),
     path("api/whatsapp/test/", WhatsAppTestView.as_view()),
+    path('api/auth/password-reset/request/', PasswordResetRequestView.as_view()),
+    path('api/auth/password-reset/confirm/', PasswordResetConfirmView.as_view()),
 
 ]
