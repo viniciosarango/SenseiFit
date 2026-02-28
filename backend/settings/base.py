@@ -12,8 +12,10 @@ env = environ.Env(
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# 2. Lectura del archivo .env
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+# 2. Lectura del archivo .env según el settings activo
+DJANGO_SETTINGS_MODULE = os.environ.get("DJANGO_SETTINGS_MODULE", "")
+env_file = ".env.production" if DJANGO_SETTINGS_MODULE.endswith("settings.production") else ".env"
+environ.Env.read_env(os.path.join(BASE_DIR, env_file))
 
 
 SECRET_KEY = env('SECRET_KEY')
@@ -176,3 +178,15 @@ WHATSAPP_TEST_TO = env("WHATSAPP_TEST_TO", default="")
 WHATSAPP_API_VERSION = env("WHATSAPP_API_VERSION", default="v22.0")
 WHATSAPP_TEMPLATE_CREDENTIALS = env("WHATSAPP_TEMPLATE_CREDENTIALS", default="hello_world")
 WHATSAPP_TEMPLATE_LANG = env("WHATSAPP_TEMPLATE_LANG", default="en_US")
+
+
+# =========================
+# EMAIL (SMTP)
+# =========================
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = env("EMAIL_HOST", default="localhost")
+EMAIL_PORT = env.int("EMAIL_PORT", default=25)
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="webmaster@localhost")
