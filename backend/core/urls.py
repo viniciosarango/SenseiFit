@@ -13,6 +13,9 @@ from core.views.attendance_screen import last_attendance
 from core.views.auth import MeView, ChangePasswordView
 from core.views.client_profile import ClientMeView
 from core.views.companies import CompanyViewSet
+from core.views.email_verification import SendEmailVerificationView
+from core.views.email_verify_confirm import VerifyEmailTokenView
+from core.views.whatsapp_test import WhatsAppTestView
 
 
 
@@ -50,5 +53,8 @@ urlpatterns = [
     path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('api/client/me/', ClientMeView.as_view(), name='client-me'),
     path('api/attendance-webhook/', AttendanceWebhookView.as_view(), name='attendance-webhook'),
+    path("api/contact-points/email/send-verification/", SendEmailVerificationView.as_view(), name="send-email-verification"),
+    path("api/contact-points/email/verify/", VerifyEmailTokenView.as_view(), name="verify-email-token"),
+    path("api/whatsapp/test/", WhatsAppTestView.as_view()),
 
 ]

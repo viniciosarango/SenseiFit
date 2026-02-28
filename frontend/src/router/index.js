@@ -5,6 +5,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/auth/login', name: 'login', component: () => import('@/views/pages/auth/Login.vue') },
+    { path: '/verificar-email', name: 'verify-email', component: () => import('@/views/pages/VerifyEmail.vue') },
 
     {
       path: '/',
@@ -63,6 +64,8 @@ const router = createRouter({
             component: () => import('@/views/pages/AccountSecurity.vue')
         },
 
+        
+
       ]
     }
   ]
@@ -71,18 +74,26 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
     const authStore = useAuthStore()
 
-    if (!authStore.token && to.path !== '/auth/login') {
-        return next('/auth/login')
+    if (!authStore.token && !['/auth/login', '/verificar-email'].includes(to.path)) {
+      return next('/auth/login')
+    }
+
+    // 🔒 Forzar cambio de contraseña si está marcado
+    if (authStore.mustChangePassword) {
+        const allowed = ['/seguridad', '/account', '/auth/login']
+        if (!allowed.includes(to.path)) {
+            return next('/seguridad')
+        }
     }
 
     // 🔒 Cliente solo puede acceder a su portal y cuenta
     if (authStore.role === 'CLIENT') {
-        const allowedRoutes = ['/mi-portal', '/account', '/seguridad']
+    const allowedRoutes = ['/mi-portal', '/account', '/seguridad', '/verificar-email']
 
-        if (!allowedRoutes.includes(to.path)) {
-            return next('/mi-portal')
-        }
+    if (!allowedRoutes.includes(to.path)) {
+        return next('/mi-portal')
     }
+}
 
     next()
 })

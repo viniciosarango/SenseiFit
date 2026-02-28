@@ -14,6 +14,11 @@ import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Dropdown from 'primevue/dropdown'
 
+import { useToast } from 'primevue/usetoast'
+const toast = useToast()
+
+
+
 const paymentsFilter = ref('PAID') // PAID | ALL
 const payments = computed(() => client.value?.payments || [])
 
@@ -119,6 +124,28 @@ const onPhotoSelected = async (event) => {
     errorMsg.value = error.response?.data?.detail || 'No se pudo actualizar la foto.'
   }
 }
+
+const emailVerification = computed(() => client.value?.email_verification)
+
+const sendEmailVerification = async () => {
+  try {
+    await api.post('contact-points/email/send-verification/')
+    toast.add({
+      severity: 'success',
+      summary: 'Listo',
+      detail: 'Te enviamos un correo para verificar tu email.',
+      life: 3500
+    })
+  } catch (err) {
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: err.response?.data?.detail || 'No se pudo enviar el correo de verificación.',
+      life: 4000
+    })
+  }
+}
+
 </script>
 
 <template>
@@ -201,6 +228,22 @@ const onPhotoSelected = async (event) => {
             <div class="col-12 md:col-6">
               <label class="font-semibold">Email</label>
               <InputText v-model="client.email" :disabled="!editing" class="w-full" />
+            </div>
+
+            <div class="mt-2 flex align-items-center gap-2" v-if="emailVerification?.has_email">
+              <Tag
+                :value="emailVerification.is_verified ? 'Email verificado' : 'Email no verificado'"
+                :severity="emailVerification.is_verified ? 'success' : 'warning'"
+              />
+
+              <Button
+                v-if="!emailVerification.is_verified"
+                label="Enviar verificación"
+                icon="pi pi-send"
+                size="small"
+                severity="secondary"
+                @click="sendEmailVerification"
+              />
             </div>
 
             <div class="col-12 md:col-6">

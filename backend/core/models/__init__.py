@@ -20,6 +20,10 @@ from .access import AccessToken, AccessLog
 from .notifications import NotificationTemplate, Notification
 from .payment_method import PaymentMethod
 from .client_gym import ClientGym
+from .contact_point import ContactPoint
+from .email_verification_token import EmailVerificationToken
+
+
 
 
 
@@ -50,5 +54,7 @@ __all__ = [
     'AccessLog',
     'NotificationTemplate',
     'Notification',
+    'ContactPoint',
+    'EmailVerificationToken',
 ]
 

@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from core.models import Client, Membership, Payment
+from core.services.client_onboarding_service import upsert_contact_points_for_client
+from core.models import ContactPoint
 
 
 class ClientPortalSerializer(serializers.ModelSerializer):
@@ -7,8 +9,9 @@ class ClientPortalSerializer(serializers.ModelSerializer):
     membership_info = serializers.SerializerMethodField()
     memberships = serializers.SerializerMethodField()
 
-    # ✅ NUEVO
+    email_verification = serializers.SerializerMethodField()
     payments = serializers.SerializerMethodField()
+
 
     class Meta:
         model = Client
@@ -22,6 +25,7 @@ class ClientPortalSerializer(serializers.ModelSerializer):
             # Perfil editable
             "phone",
             "email",
+            "email_verification",
             "birth_date",
             "photo",
             "photo_url",
@@ -42,6 +46,7 @@ class ClientPortalSerializer(serializers.ModelSerializer):
             "membership_info",
             "memberships",
             "payments",
+            "email_verification",
         ]
 
     def get_photo_url(self, obj):
@@ -141,3 +146,44 @@ class ClientPortalSerializer(serializers.ModelSerializer):
             if Client.objects.filter(email=value).exclude(id=client_id).exists():
                 raise serializers.ValidationError("Este email ya está registrado en otro cliente.")
         return value
+    
+    
+    def update(self, instance, validated_data):
+        # Guardamos valores anteriores para detectar cambios
+        old_email = instance.email
+        old_phone = instance.phone
+
+        instance = super().update(instance, validated_data)
+
+        # Si cambió email o phone, actualizamos ContactPoints
+        new_email = instance.email
+        new_phone = instance.phone
+
+        if (old_email != new_email) or (old_phone != new_phone):
+            upsert_contact_points_for_client(
+                company=instance.company,
+                client=instance,
+                user=instance.user,
+                email=new_email,
+                phone=new_phone
+            )
+
+        return instance
+    
+
+    def get_email_verification(self, obj):
+        cp = ContactPoint.objects.filter(
+            company=obj.company,
+            client=obj,
+            type=ContactPoint.Types.EMAIL,
+            is_primary=True,
+        ).first()
+
+        if not cp:
+            return {"has_email": False, "is_verified": False}
+
+        return {
+            "has_email": True,
+            "email": cp.value,
+            "is_verified": bool(cp.is_verified),
+        }

@@ -40,6 +40,9 @@ class User(AbstractUser):
         related_name='staff_members'
     )
 
+    must_change_password = models.BooleanField(default=False)
+    
+
     # ------------------------------------------------------------------
     # VALIDACIÓN ESTRUCTURAL (SaaS Profesional)
     # ------------------------------------------------------------------

@@ -8,6 +8,7 @@ export const useAuthStore = defineStore('auth', {
         isSuperuser: localStorage.getItem('is_superuser') === 'true',
         companyId: localStorage.getItem('company_id') || null,
         gymId: localStorage.getItem('gym_id') || null,
+        mustChangePassword: localStorage.getItem('must_change_password') === 'true',
     }),
 
     actions: {
@@ -20,6 +21,9 @@ export const useAuthStore = defineStore('auth', {
 
             // 🔥 Obtener info del usuario después de login
             const meResponse = await api.get('me/')
+
+            this.mustChangePassword = !!meResponse.data.must_change_password
+            localStorage.setItem('must_change_password', this.mustChangePassword)
 
             this.role = meResponse.data.role
             this.isSuperuser = meResponse.data.is_superuser

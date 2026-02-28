@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from .models import (
     Company, Gym, User, Client, Membership, Plan, Payment, 
     Service, GymClass, Reservation, Attendance, Product, 
-    Inventory, Sale, PaymentMethod
+    Inventory, Sale, PaymentMethod, ContactPoint
 )
 from django.contrib.auth.admin import UserAdmin
 
@@ -432,6 +432,13 @@ class PaymentMethodAdmin(admin.ModelAdmin):
         "active",
         "created_at",
     )
+
+
+@admin.register(ContactPoint)
+class ContactPointAdmin(admin.ModelAdmin):
+    list_display = ("id", "company", "type", "value", "is_primary", "is_verified", "client", "user", "created_at")
+    list_filter = ("type", "is_primary", "is_verified", "company")
+    search_fields = ("value", "client__first_name", "client__last_name", "user__username", "company__name")
 
 admin.site.register(Company)
 

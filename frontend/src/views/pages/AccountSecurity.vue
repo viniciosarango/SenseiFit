@@ -1,11 +1,13 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+
 import { useToast } from 'primevue/usetoast'
 import api from '@/service/api'
+import { useAuthStore } from '@/store/auth'
 
-const router = useRouter()
+
 const toast = useToast()
+const authStore = useAuthStore()
 
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -39,10 +41,8 @@ const changePassword = async () => {
         })
 
         setTimeout(() => {
-            localStorage.removeItem('access')
-            localStorage.removeItem('refresh')
-            router.push('/auth/login')
-        }, 1500)
+            authStore.logout()
+        }, 1200)
 
     } catch (error) {
 
@@ -114,6 +114,8 @@ const changePassword = async () => {
                 icon="pi pi-check"
                 class="w-full"
                 @click="changePassword"
+                :loading="loading"
+                :disabled="loading"
             />
         </div>
 
