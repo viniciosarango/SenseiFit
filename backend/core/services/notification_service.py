@@ -1,6 +1,7 @@
 import requests
 from django.conf import settings
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMessage, get_connection
+
 
 
 def send_client_credentials_email(
@@ -12,23 +13,13 @@ def send_client_credentials_email(
     login_url=None,
     reply_to=None
 ):
-    """
-    Envío profesional de credenciales iniciales.
-    - From: global (settings.DEFAULT_FROM_EMAIL)
-    - Reply-To: opcional (por Company)
-    """
-
     if not email:
         return
 
     subject = "Acceso a tu portal - SenseiFit / Dorian's Gym 🏋️‍♂️"
 
     name_line = f"Hola {full_name}," if full_name else "Hola,"
-    url_line = (
-        f"\n\nAccede aquí: {login_url}\n"
-        if login_url else
-        "\nAccede desde: (URL no configurada)\n"
-    )
+    url_line = f"\n\nAccede aquí: {login_url}\n" if login_url else "\nAccede desde: (URL no configurada)\n"
 
     message = f"""{name_line}
 
@@ -50,12 +41,15 @@ Dorian Gym
         reply_to=[reply_to] if reply_to else None,
     )
 
+    # ✅ NO romper creación de cliente si SMTP está bloqueado/lento en PROD
     try:
+        timeout = getattr(settings, "EMAIL_TIMEOUT", 5)
+        conn = get_connection(timeout=timeout)
+        msg.connection = conn
         msg.send(fail_silently=True)
     except Exception:
         pass
-
-
+    
 
 
 def send_email_verification_link(*, email, full_name=None, verify_url=None, reply_to=None):
@@ -63,7 +57,6 @@ def send_email_verification_link(*, email, full_name=None, verify_url=None, repl
         return
 
     subject = "Verifica tu email - SenseiFit ✅"
-
     name_line = f"Hola {full_name}," if full_name else "Hola,"
 
     message = f"""{name_line}
@@ -85,7 +78,11 @@ Si tú no solicitaste esto, puedes ignorar este mensaje.
         reply_to=[reply_to] if reply_to else None,
     )
 
+    # ✅ NO romper el flujo si SMTP está bloqueado / lento en producción
     try:
+        timeout = getattr(settings, "EMAIL_TIMEOUT", 5)
+        conn = get_connection(timeout=timeout)
+        msg.connection = conn
         msg.send(fail_silently=True)
     except Exception:
         pass
