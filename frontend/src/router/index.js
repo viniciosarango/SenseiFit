@@ -64,6 +64,12 @@ const router = createRouter({
             component: () => import('@/views/pages/AccountSecurity.vue')
         },
 
+        {
+          path: '/clients/:id',
+          name: 'client-profile',
+          component: () => import('@/views/pages/ClientProfile.vue'),
+        }
+
         
 
       ]

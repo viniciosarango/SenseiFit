@@ -47,7 +47,9 @@ async function loadGyms(companyId = null) {
   }
 }
 
-
+const verPerfilCliente = (socio) => {
+  router.push({ name: 'client-profile', params: { id: socio.id } })
+}
 
 const verHistorialPagos = (socio) => {
     // Usamos el ID del socio directamente para la nueva ruta de historial
@@ -487,6 +489,7 @@ function onSaleTypeChange(type) {
         @view-history="verHistorialPagos"
         @charge="irAPagarDesdeCliente"
         @reactivate="confirmReactivateClient"
+        @view-profile="verPerfilCliente"
         />
 
         <Dialog v-model:visible="deleteClientDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">

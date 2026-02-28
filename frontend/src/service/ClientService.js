@@ -18,6 +18,10 @@ export const ClientService = {
         }
     },
 
+    getClientProfile(id) {
+        return api.get(`clients/${id}/profile/`).then((res) => res.data);
+    },
+
 
     deleteClient(id) {
         return api.delete(`clients/${id}/`); 

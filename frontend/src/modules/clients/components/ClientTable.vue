@@ -12,6 +12,8 @@ const props = defineProps({
 const rowMenuRef = ref()
 const rowTarget = ref(null)
 
+const viewProfile = (row) => emit('view-profile', row)
+
 const toggleRowMenu = (event, row) => {
   rowTarget.value = row
   rowMenuRef.value.toggle(event)
@@ -54,7 +56,8 @@ const emit = defineEmits([
   'view-history',
   'deactivate',
   'charge',
-  'reactivate'
+  'reactivate',
+  'view-profile'
 ])
 
 const filters = ref({
@@ -101,6 +104,7 @@ const getStatusSeverity = (status) => {
       paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport RowsPerPageDropdown"
       :rowsPerPageOptions="[5, 10, 25]"
       currentPageReportTemplate="Mostrando {first} a {last} de {totalRecords} socios"
+      @row-click="(e) => viewProfile(e.data)"
     >
       <template #header>
         <div class="flex justify-between items-center">
@@ -159,6 +163,14 @@ const getStatusSeverity = (status) => {
       <Column header="Acciones" style="min-width: 14rem">
         <template #body="slotProps">
           <div class="flex align-items-center gap-2">
+
+            <Button
+              icon="pi pi-eye"
+              rounded
+              severity="info"
+              v-tooltip.top="'Ver perfil'"
+              @click="emit('view-profile', slotProps.data)"
+            />
 
             <!-- 1) ACCIÓN PRINCIPAL: VENDER/RENOVAR -->
             <Button

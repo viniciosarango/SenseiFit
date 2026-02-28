@@ -187,6 +187,16 @@ const formatDate = (value) => {
     });
 };
 
+const formatDateOnly = (value) => {
+  if (!value) return '—'
+  const date = new Date(value)
+  return date.toLocaleDateString('es-EC', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  })
+}
+
 
 const freezeMembership = async (membership) => {
     try {
@@ -308,14 +318,16 @@ const activateMembership = async (membership) => {
                 </template>
             </Column>
 
-            <Column header="Vigencia">
-                <template #body="slotProps">
-                    <span class="text-sm">
-                        {{ slotProps.data.start_date }} 
-                        <i class="pi pi-arrow-right text-xs mx-1 text-500"></i> 
-                        {{ slotProps.data.end_date }}
-                    </span>
-                </template>
+            <Column header="Inicio" sortable field="start_date">
+            <template #body="slotProps">
+                {{ formatDateOnly(slotProps.data.start_date) }}
+            </template>
+            </Column>
+
+            <Column header="Fin" sortable field="end_date">
+            <template #body="slotProps">
+                {{ formatDateOnly(slotProps.data.end_date) }}
+            </template>
             </Column>
 
             <Column header="Días Congelados">
