@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework import status
 
 from core.services.whatsapp_service import send_whatsapp_template
 
@@ -9,6 +10,9 @@ class WhatsAppRealTemplateTestView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if not request.user.is_superuser:
+            return Response({"detail": "No autorizado."}, status=403)
+        
         to = request.data.get("to") or "593981891840"
 
         template_name = request.data.get("template_name") or "sf_welcome_portal"
