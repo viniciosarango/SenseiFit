@@ -4,10 +4,8 @@ from django.db import transaction
 from django.utils.crypto import get_random_string
 from core.models.client import Client
 from core.models.client_gym import ClientGym
-from core.services.notification_service import (
-    send_client_credentials_email,
-    send_client_credentials_whatsapp,
-)
+from core.services.notification_service import send_client_credentials_email
+from core.services.whatsapp_service import send_whatsapp_template
 from core.models.contact_point import ContactPoint
 from django.conf import settings
 import random
@@ -210,13 +208,26 @@ def create_client_with_user_service(
                     reply_to=company.support_email
                 )
 
+            # ✅ WhatsApp Welcome (si hay teléfono)
             try:
-                send_client_credentials_whatsapp(
-                    full_name=f"{first_name} {last_name}".strip(),
-                    username=user.username,
-                    temp_password=temp_password,
-                    login_url=login_url,
-                )
+                if client.phone:
+                    gym_name = getattr(gym, "name", "") or "SenseiFit"
+                    full_name = f"{first_name} {last_name}".strip() or "Hola"
+                    send_whatsapp_template(
+                        to=client.phone,
+                        template_name="sf_welcome_portal",
+                        lang="es_EC",
+                        components=[
+                            {
+                                "type": "body",
+                                "parameters": [
+                                    {"type": "text", "text": full_name},     # {{1}}
+                                    {"type": "text", "text": gym_name},      # {{2}}
+                                    {"type": "text", "text": login_url or ""}# {{3}}
+                                ],
+                            }
+                        ],
+                    )
             except Exception as e:
                 print("WhatsApp error:", e)
 
@@ -284,14 +295,25 @@ def create_client_with_user_service(
                 reply_to=company.support_email
             )
 
-        # ✅ WhatsApp (LOCAL/DEV: siempre manda a WHATSAPP_TEST_TO)
         try:
-            send_client_credentials_whatsapp(
-                full_name=f"{first_name} {last_name}".strip(),
-                username=user.username,
-                temp_password=temp_password,
-                login_url=login_url,
-            )
+            if client.phone:
+                gym_name = getattr(gym, "name", "") or "SenseiFit"
+                full_name = f"{first_name} {last_name}".strip() or "Hola"
+                send_whatsapp_template(
+                    to=client.phone,
+                    template_name="sf_welcome_portal",
+                    lang="es_EC",
+                    components=[
+                        {
+                            "type": "body",
+                            "parameters": [
+                                {"type": "text", "text": full_name},     # {{1}}
+                                {"type": "text", "text": gym_name},      # {{2}}
+                                {"type": "text", "text": login_url or ""}# {{3}}
+                            ],
+                        }
+                    ],
+                )
         except Exception as e:
             print("WhatsApp error:", e)
 

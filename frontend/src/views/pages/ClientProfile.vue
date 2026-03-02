@@ -9,6 +9,13 @@ const loading = ref(false)
 
 const fmtDate = (v) => {
   if (!v) return '-'
+
+  // Si viene como "YYYY-MM-DD" (date-only), formatear sin Date() para evitar desfase por zona horaria
+  if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const [y, m, d] = v.split('-')
+    return `${d}/${m}/${y}`
+  }
+
   const d = new Date(v)
   if (Number.isNaN(d.getTime())) return v
   return d.toLocaleDateString('es-EC')

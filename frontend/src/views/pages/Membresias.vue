@@ -189,12 +189,17 @@ const formatDate = (value) => {
 
 const formatDateOnly = (value) => {
   if (!value) return '—'
+
+  // Si viene como "YYYY-MM-DD" (date-only), formatear sin Date() (evita timezone shift)
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split('-')
+    return `${d}/${m}/${y}`
+  }
+
+  // fallback (si viene datetime)
   const date = new Date(value)
-  return date.toLocaleDateString('es-EC', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  })
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 

@@ -80,7 +80,9 @@ const router = createRouter({
           path: '/clients/:id',
           name: 'client-profile',
           component: () => import('@/views/pages/ClientProfile.vue'),
-        }
+        },
+
+        { path: '/privacy', name: 'privacy', component: () => import('@/views/pages/PrivacyPolicy.vue') }
 
         
 
@@ -96,7 +98,8 @@ router.beforeEach((to, from, next) => {
       '/auth/login',
       '/verificar-email',
       '/auth/forgot-password',
-      '/auth/reset-password'
+      '/auth/reset-password',
+      '/privacy'
     ]
 
     if (!authStore.token && !publicRoutes.includes(to.path)) {
