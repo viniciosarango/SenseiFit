@@ -1,5 +1,5 @@
 from django.conf import settings
-from core.services.whatsapp_service import send_whatsapp_template, WhatsAppSendError
+from core.services.whatsapp_service import send_whatsapp_template
 
 
 def send_client_link_whatsapp(*, phone_e164: str, full_name: str, gym_name: str):
@@ -9,7 +9,7 @@ def send_client_link_whatsapp(*, phone_e164: str, full_name: str, gym_name: str)
     """
     template = getattr(settings, "WHATSAPP_TEMPLATE_CREDENTIALS", "")
     if not template:
-        raise WhatsAppSendError("Falta WHATSAPP_TEMPLATE_CREDENTIALS en settings.")
+        raise Exception("Falta WHATSAPP_TEMPLATE_CREDENTIALS en settings.")
 
     frontend_url = getattr(settings, "FRONTEND_URL", "").rstrip("/")
     login_url = f"{frontend_url}/auth/login" if frontend_url else ""

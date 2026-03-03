@@ -13,6 +13,10 @@ def send_whatsapp_template(*, to: str, template_name: str, lang: str = "en_US", 
     token = getattr(settings, "WHATSAPP_ACCESS_TOKEN", "") or ""
     version = getattr(settings, "WHATSAPP_API_VERSION", "v22.0") or "v22.0"
 
+    print("WA_CFG phone_number_id=", phone_number_id, flush=True)
+    print("WA_CFG token_present=", bool(token), flush=True)
+    print("WA_CFG version=", version, flush=True)
+
     # ✅ No romper el sistema si no está configurado
     if not phone_number_id or not token:
         return {"skipped": True, "reason": "whatsapp_not_configured"}
@@ -41,9 +45,15 @@ def send_whatsapp_template(*, to: str, template_name: str, lang: str = "en_US", 
     }
 
     try:
+        print("WA_TO_NORMALIZED=", to, flush=True)
+        print("WA_URL=", url, flush=True)
+        print("WA_PAYLOAD=", payload, flush=True)
         r = requests.post(url, json=payload, headers=headers, timeout=20)
+        print("WA_HTTP_STATUS=", r.status_code, flush=True)
+        print("WA_HTTP_TEXT=", r.text[:500], flush=True)
         content_type = (r.headers.get("content-type") or "").lower()
         data = r.json() if content_type.startswith("application/json") else {"raw": r.text}
+        print("WA_MESSAGE_ID=", (data.get("messages") or [{}])[0].get("id"), flush=True)
 
         # ✅ No romper el sistema si Meta responde error
         if r.status_code >= 400:

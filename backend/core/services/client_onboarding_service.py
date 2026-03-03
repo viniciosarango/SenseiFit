@@ -108,6 +108,7 @@ def create_client_with_user_service(
     gender=None,
 ):
 
+    print("✅ ONBOARDING SERVICE EJECUTADO", flush=True)
     if not company:
         raise ClientOnboardingError("La empresa es obligatoria.")
 
@@ -117,7 +118,11 @@ def create_client_with_user_service(
     first_name = (first_name or "").strip()
     last_name = (last_name or "").strip()
     email = str(email).strip().lower() if email else None
+
     phone = str(phone).strip() if phone else None
+    if phone:
+        phone = phone.replace("+", "").replace(" ", "")
+    
     id_number = str(id_number).strip() if id_number else None
 
     frontend_url = (getattr(settings, "FRONTEND_URL", "") or "").rstrip("/")
@@ -164,6 +169,34 @@ def create_client_with_user_service(
             email=client.email,
             phone=client.phone
         )
+
+        
+
+        # ✅ WhatsApp (cliente existente con user) - único envío
+        if client.user is not None and frontend_url and client.phone:
+            user = client.user
+            token = PasswordResetTokenGenerator().make_token(user)
+            uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+            reset_url = f"{frontend_url}/auth/reset-password?uid={uidb64}&token={token}"
+
+            resp = send_whatsapp_template(
+                to=(client.phone or "").replace("+", "").replace(" ", ""),
+                template_name=getattr(settings, "WHATSAPP_TEMPLATE_CREDENTIALS", "sf_welcome_portal"),
+                lang=getattr(settings, "WHATSAPP_TEMPLATE_LANG", "es_EC"),
+                components=[
+                    {
+                        "type": "body",
+                        "parameters": [
+                            {"type": "text", "text": f"{client.first_name} {client.last_name}".strip() or "Hola"},
+                            {"type": "text", "text": getattr(gym, "name", "") or "SenseiFit"},
+                            {"type": "text", "text": reset_url},
+                        ],
+                    }
+                ],
+            )
+            print("WA_SEND_EXISTING_USER:", resp, flush=True)
+
+
 
         # ✅ Si el cliente existe pero no tiene usuario, crearlo ahora (sin duplicar cliente)
         if client.user is None:
@@ -222,28 +255,44 @@ def create_client_with_user_service(
                     reply_to=company.support_email
                 )
 
+          
+
+
             # ✅ WhatsApp Welcome (si hay teléfono)
-            try:
-                if client.phone:
-                    gym_name = getattr(gym, "name", "") or "SenseiFit"
-                    full_name = f"{first_name} {last_name}".strip() or "Hola"
-                    send_whatsapp_template(
-                        to=client.phone,
-                        template_name="sf_welcome_portal",
-                        lang="es_EC",
-                        components=[
-                            {
-                                "type": "body",
-                                "parameters": [
-                                    {"type": "text", "text": full_name},     # {{1}}
-                                    {"type": "text", "text": gym_name},      # {{2}}
-                                    {"type": "text", "text": reset_url}  # {{3}}
-                                ],
-                            }
-                        ],
-                    )
-            except Exception as e:
-                print("WhatsApp error:", e)
+            # try:
+            #     if client.phone:
+            #         gym_name = getattr(gym, "name", "") or "SenseiFit"
+            #         full_name = f"{first_name} {last_name}".strip() or "Hola"
+            #         # send_whatsapp_template(
+            #         #     to=client.phone,
+            #         #     template_name="sf_welcome_portal",
+            #         #     lang="es_EC",
+            #         #     components=[
+            #         #         {
+            #         #             "type": "body",
+            #         #             "parameters": [
+            #         #                 {"type": "text", "text": full_name},     # {{1}}
+            #         #                 {"type": "text", "text": gym_name},      # {{2}}
+            #         #                 {"type": "text", "text": reset_url}  # {{3}}
+            #         #             ],
+            #         #         }
+            #         #     ],
+            #         # )
+
+            #         resp = send_whatsapp_template(
+            #             to=client.phone,
+            #             template_name="sf_welcome_portal",
+            #             lang="es_EC",
+            #             components=[ ... ],
+            #         )
+            #         print("WA_SEND resp:", resp, flush=True)
+
+
+
+            # # except Exception as e:
+            # #     print("WhatsApp error:", e)
+            # except Exception as e:
+            #     print("WhatsApp error:", e, flush=True)
 
     # 🔵 Si NO existe → crear cliente y user
     else:
