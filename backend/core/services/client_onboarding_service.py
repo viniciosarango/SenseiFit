@@ -319,8 +319,8 @@ def create_client_with_user_service(
                 full_name = f"{first_name} {last_name}".strip() or "Hola"
                 send_whatsapp_template(
                     to=client.phone,
-                    template_name="sf_welcome_portal",
-                    lang="es_EC",
+                    template_name=getattr(settings, "WHATSAPP_TEMPLATE_CREDENTIALS", "sf_welcome_portal"),
+                    lang=getattr(settings, "WHATSAPP_TEMPLATE_LANG", "es_EC"),
                     components=[
                         {
                             "type": "body",

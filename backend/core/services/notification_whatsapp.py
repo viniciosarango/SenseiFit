@@ -23,8 +23,17 @@ def send_client_link_whatsapp(*, phone_e164: str, full_name: str, gym_name: str)
     ]
 
     return send_whatsapp_template(
-        to_phone_e164=phone_e164,
+        to=phone_e164,
         template_name=template,
-        language_code="es_EC",
-        body_params=body_params,
+        lang="es_EC",
+        components=[
+            {
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": full_name or "Cliente"},
+                    {"type": "text", "text": gym_name or "Dorians Gym"},
+                    {"type": "text", "text": login_url},
+                ],
+            }
+        ],
     )
