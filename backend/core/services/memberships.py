@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction
@@ -12,11 +12,11 @@ from core.utils.hikvision import sync_hikvision_async
 class MembershipError(Exception):
     pass
 
+MONEY_Q = Decimal("0.01")
 
-from decimal import Decimal
-from datetime import timedelta
-from django.db import transaction
-from django.utils import timezone
+def money(v):
+    return Decimal(str(v or 0)).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
+
 
 @transaction.atomic
 def create_membership_service(
@@ -48,7 +48,7 @@ def create_membership_service(
     start_date = requested_start_date or today
 
     # ✅ Guardamos el pago inicial aparte (NO se escribe en membership directo)
-    initial_paid = Decimal(str(paid_amount or 0))
+    initial_paid = money(paid_amount)
 
     # 2) Buscar membresía actualmente ACTIVA (Seguridad del búnker)
     active_mem = Membership.objects.filter(
@@ -93,8 +93,11 @@ def create_membership_service(
     # 5) Calcular fecha de fin
     end_date = start_date + timedelta(days=plan.duration_days - 1)
 
-    # 6) Crear membresía
-    # ✅ paid_amount SIEMPRE 0: el motor de pagos es la única fuente de verdad
+    original_price = money(plan.price)
+    discount_percent_applied = money(discount_percent)
+    enrollment_fee_applied = money(enrollment_fee)
+    
+    
     membership = Membership.objects.create(
         client=client,
         gym=gym,
@@ -102,9 +105,9 @@ def create_membership_service(
         start_date=start_date,
         end_date=end_date,
         action=action,
-        original_price=plan.price,
-        discount_percent_applied=Decimal(str(discount_percent)),
-        enrollment_fee_applied=Decimal(str(enrollment_fee)),
+        original_price=original_price,
+        discount_percent_applied=discount_percent_applied,
+        enrollment_fee_applied=enrollment_fee_applied,
         paid_amount=Decimal("0.00"),
         operational_status=operational_status,
         created_by=created_by,

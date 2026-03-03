@@ -1,8 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from decimal import Decimal
-
+from decimal import Decimal, ROUND_HALF_UP
 
 class Membership(models.Model):
 
@@ -194,24 +193,36 @@ class Membership(models.Model):
     def sessions_remaining(self):
         return max(0, self.sessions_total - self.sessions_consumed)
 
+
+
     # ============================================================
     # SAVE BLINDADO
     # ============================================================
 
     def save(self, *args, **kwargs):
 
+        MONEY_Q = Decimal("0.01")
+
+        def q(v):
+            return Decimal(str(v or 0)).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
+
         # Inicializa sesiones si es nueva y es plan por sesiones
         if not self.pk and self.plan.plan_type == 'SESSIONS':
             self.sessions_total = self.plan.total_sessions
 
-        orig = Decimal(str(self.original_price or 0))
-        disc_per = Decimal(str(self.discount_percent_applied or 0))
-        enrollment = Decimal(str(self.enrollment_fee_applied or 0))
-        u_credit = Decimal(str(self.upgrade_credit or 0))
+        orig = q(self.original_price)
+        disc_per = Decimal(str(self.discount_percent_applied or 0))  # % no necesita q
+        enrollment = q(self.enrollment_fee_applied)
+        u_credit = q(self.upgrade_credit)
+        paid = q(self.paid_amount)
 
-        self.final_price = orig - (orig * (disc_per / 100))
-        self.total_amount = self.final_price + enrollment - u_credit
-        self.balance = max(Decimal('0.00'), self.total_amount - self.paid_amount)
+        discount_amount = (orig * disc_per / Decimal("100")).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
+
+        self.final_price = (orig - discount_amount).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
+        self.total_amount = (self.final_price + enrollment - u_credit).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
+
+        raw_balance = (self.total_amount - paid)
+        self.balance = (raw_balance if raw_balance > 0 else Decimal("0.00")).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
 
         if self.balance == 0:
             self.financial_status = 'Pagado'
