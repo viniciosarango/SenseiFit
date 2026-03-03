@@ -111,10 +111,27 @@ onMounted(() => {
               {{ errorMsg }}
             </small>
 
+            <small v-if="msg" class="block text-green-400">
+              {{ msg }}
+            </small>
+
             <div class="flex gap-3 mt-2">
-              <Button label="Volver" outlined class="w-full p-3" @click="goBack" />
-              <Button label="Guardar" class="w-full p-3" @click="handleReset" :loading="loading" />
+              <Button
+                label="Volver"
+                outlined
+                class="w-full p-3"
+                @click="router.push('/auth/login')"
+                :disabled="loading"
+              />
+              <Button
+                label="Guardar"
+                class="w-full p-3"
+                @click="submit"
+                :loading="loading"
+                :disabled="loading || !canSubmit"
+              />
             </div>
+
           </div>
         </div>
       </div>

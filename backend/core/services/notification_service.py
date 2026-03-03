@@ -19,31 +19,118 @@ def send_client_credentials_email(
 
     subject = "Acceso a tu portal - Dorian's Gym / SenseiFit 🏋️‍♂️"
 
-    name_line = f"Hola {full_name}," if full_name else "Hola,"
-    url_line = f"\n\nAccede aquí: {login_url}\n" if login_url else "\nAccede desde: (URL no configurada)\n"
+    name = full_name or "Hola"
+    safe_name = escape(name)
+    safe_user = escape(str(username))
+    safe_pin = escape(str(temp_password))
+    safe_url = escape(login_url or "")
 
-    message = f"""{name_line}
+    # Texto plano (fallback)
+    text_body = f"""{name}
 
-Tu cuenta ha sido creada correctamente.{url_line}
+Tu cuenta ha sido creada correctamente.
+
+Accede aquí:
+{login_url or '(URL no configurada)'}
+
 Usuario: {username}
 Contraseña temporal (PIN): {temp_password}
 
-Por seguridad y para acceder a tu portal, te pediremos que cambies tu contraseña en el primer ingreso.
+Por seguridad, te pediremos que cambies tu contraseña en el primer ingreso.
 
-Dorian Gym
-¡Transforma tu vida! 💪
+Dorians Gym — SenseiFit
 """
 
-    msg = EmailMessage(
-        subject=subject,
-        body=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        to=[email],
-        reply_to=[reply_to] if reply_to else ["soporte@senseifit.app"],
-    )
+    # HTML con botón + fallback link
+    html_body = f"""
+<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f6f7fb;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f7fb;padding:24px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0"
+                 style="background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);">
+            <tr>
+              <td style="padding:28px 28px 10px 28px;">
+                <h2 style="margin:0 0 8px 0;color:#111827;font-size:20px;">Acceso a tu portal</h2>
+                <p style="margin:0;color:#374151;font-size:14px;line-height:20px;">
+                  Hola {safe_name},<br/>
+                  Tu cuenta ha sido creada correctamente.
+                </p>
+              </td>
+            </tr>
 
-    # ✅ NO romper creación de cliente si falla el email
+            <tr>
+              <td align="center" style="padding:18px 28px;">
+                <a href="{safe_url}"
+                   style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;
+                          padding:12px 18px;border-radius:10px;font-size:14px;font-weight:bold;">
+                  Acceder al portal
+                </a>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:0 28px 18px 28px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+                       style="background:#f9fafb;border:1px solid #eef2f7;border-radius:12px;">
+                  <tr>
+                    <td style="padding:16px 16px;">
+                      <p style="margin:0 0 6px 0;color:#111827;font-size:13px;"><b>Usuario</b></p>
+                      <p style="margin:0;color:#111827;font-size:14px;">{safe_user}</p>
+
+                      <div style="height:12px;"></div>
+
+                      <p style="margin:0 0 6px 0;color:#111827;font-size:13px;"><b>PIN temporal</b></p>
+                      <p style="margin:0;font-size:22px;letter-spacing:2px;color:#111827;"><b>{safe_pin}</b></p>
+
+                      <div style="height:12px;"></div>
+
+                      <p style="margin:0;color:#6b7280;font-size:12px;line-height:18px;">
+                        Por seguridad, te pediremos que cambies tu contraseña en el primer ingreso.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:0 28px 22px 28px;">
+                <p style="margin:0;color:#6b7280;font-size:12px;line-height:18px;">
+                  Si el botón no funciona, copia y pega este enlace en tu navegador:
+                  <br/>
+                  <span style="word-break:break-all;">{safe_url}</span>
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:16px 28px;background:#f9fafb;border-top:1px solid #eef2f7;">
+                <p style="margin:0;color:#6b7280;font-size:12px;line-height:18px;">
+                  Dorians Gym — SenseiFit
+                </p>
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
     try:
+        msg = EmailMultiAlternatives(
+            subject=subject,
+            body=text_body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[email],
+            reply_to=[reply_to] if reply_to else ["soporte@senseifit.app"],
+        )
+        msg.attach_alternative(html_body, "text/html")
         msg.send(fail_silently=True)
     except Exception:
         pass
