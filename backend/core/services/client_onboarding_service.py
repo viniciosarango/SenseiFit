@@ -9,6 +9,12 @@ from core.services.whatsapp_service import send_whatsapp_template
 from core.models.contact_point import ContactPoint
 from django.conf import settings
 import random
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+
+
+
 
 
 User = get_user_model()
@@ -113,7 +119,11 @@ def create_client_with_user_service(
     email = str(email).strip().lower() if email else None
     phone = str(phone).strip() if phone else None
     id_number = str(id_number).strip() if id_number else None
-    frontend_url = getattr(settings, "FRONTEND_URL", "").rstrip("/")
+
+    frontend_url = (getattr(settings, "FRONTEND_URL", "") or "").rstrip("/")
+    if frontend_url.startswith("http://") and "localhost" not in frontend_url:
+        frontend_url = frontend_url.replace("http://", "https://", 1)
+    
     login_url = f"{frontend_url}/auth/login" if frontend_url else None
 
     if not first_name:
@@ -187,6 +197,10 @@ def create_client_with_user_service(
             user.must_change_password = True
             user.save(update_fields=["must_change_password"])
 
+            token = PasswordResetTokenGenerator().make_token(user)
+            uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+            reset_url = f"{frontend_url}/auth/reset-password?uid={uidb64}&token={token}"
+
             client.user = user
             client.save(update_fields=["user"])
 
@@ -223,7 +237,7 @@ def create_client_with_user_service(
                                 "parameters": [
                                     {"type": "text", "text": full_name},     # {{1}}
                                     {"type": "text", "text": gym_name},      # {{2}}
-                                    {"type": "text", "text": login_url or ""}# {{3}}
+                                    {"type": "text", "text": reset_url}  # {{3}}
                                 ],
                             }
                         ],
@@ -262,6 +276,10 @@ def create_client_with_user_service(
         # ✅ Obligatorio cambiar contraseña
         user.must_change_password = True
         user.save(update_fields=["must_change_password"])
+
+        token = PasswordResetTokenGenerator().make_token(user)
+        uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+        reset_url = f"{frontend_url}/auth/reset-password?uid={uidb64}&token={token}"
 
         client = Client.objects.create(
             company=company,
@@ -309,7 +327,7 @@ def create_client_with_user_service(
                             "parameters": [
                                 {"type": "text", "text": full_name},     # {{1}}
                                 {"type": "text", "text": gym_name},      # {{2}}
-                                {"type": "text", "text": login_url or ""}# {{3}}
+                                {"type": "text", "text": reset_url}  # {{3}}
                             ],
                         }
                     ],

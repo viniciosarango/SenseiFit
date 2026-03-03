@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
+import api from '@/service/api'
 
 const username = ref('')
 const password = ref('')
@@ -20,13 +21,25 @@ const handleLogin = async () => {
   loading.value = true
 
   try {
+    const rawIdentifier = username.value.trim()
+
+    // 1) Resolver a username real (email / phone E164 / etc.)
+    let resolved = rawIdentifier
+    try {
+      const { data } = await api.post('auth/resolve-login/', { identifier: rawIdentifier })
+      if (data?.username) resolved = data.username
+    } catch (_) {
+      // si falla el resolver, intentamos con lo que el usuario escribió
+    }
+
+    // 2) Login normal con el username real
     await authStore.login({
-      username: username.value.trim(),
+      username: resolved,
       password: password.value
     })
+
     router.push('/clientes')
   } catch (error) {
-    // Mensaje amigable (sin adivinar estructura exacta de error)
     errorMsg.value =
       error?.response?.data?.detail ||
       error?.message ||
@@ -65,6 +78,8 @@ const handleLogin = async () => {
             <span class="text-muted-color font-medium">
               Inicia sesión para continuar
             </span>
+            <p></p>
+            
           </div>
 
           <div>
@@ -72,7 +87,7 @@ const handleLogin = async () => {
             <InputText
               v-model="username"
               type="text"
-              placeholder="Tu usuario"
+              placeholder="Email / Teléfono / Cédula"
               class="w-full mb-6"
               style="padding: 1rem"
               :disabled="loading"

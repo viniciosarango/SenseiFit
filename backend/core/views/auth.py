@@ -14,6 +14,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.serializers import UserSerializer
+from core.services.auth_resolver import resolve_user_by_identifier
+from core.services.whatsapp_service import send_whatsapp_template
+from core.models.client import Client
+from core.models import Company
+from django.core.mail import EmailMultiAlternatives
+from django.utils.html import escape
 
 
 UserModel = get_user_model()
@@ -74,24 +80,22 @@ class PasswordResetRequestView(APIView):
     permission_classes = []  # público
 
     def post(self, request):
-        email_or_username = (request.data.get("email_or_username") or "").strip().lower()
+        identifier = (request.data.get("email_or_username") or "").strip()
 
-        # Respuesta neutral (no revelar si existe)
-        ok_response = Response(
-            {"detail": "Si el usuario existe, te enviamos un enlace de recuperación."},
-            status=200
-        )
+        ok = Response({"detail": "Si el usuario existe, te enviamos un enlace de recuperación."}, status=200)
+        if not identifier:
+            return ok
 
-        if not email_or_username:
-            return ok_response
+        company = getattr(request, "company", None)
+        if not company:
+            company = Company.objects.first()   # ✅ fallback para local
 
-        user = (
-            UserModel.objects.filter(email__iexact=email_or_username).first()
-            or UserModel.objects.filter(username__iexact=email_or_username).first()
-        )
+        if not company:
+            return ok
 
-        if not user or not user.email:
-            return ok_response
+        user = resolve_user_by_identifier(company, identifier)
+        if not user:
+            return ok
 
         token = PasswordResetTokenGenerator().make_token(user)
         uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
@@ -99,8 +103,11 @@ class PasswordResetRequestView(APIView):
         frontend_url = getattr(settings, "FRONTEND_URL", "").rstrip("/")
         reset_url = f"{frontend_url}/auth/reset-password?uid={uidb64}&token={token}"
 
-        subject = "Recupera tu contraseña - SenseiFit"
-        body = f"""Hola {user.first_name or ''},
+        # 1) si tiene email → email
+        if user.email:
+            from django.core.mail import EmailMessage
+            subject = "Recupera tu contraseña - SenseiFit"
+            body = f"""Hola {user.first_name or ''},
 
 Recibimos una solicitud para restablecer tu contraseña.
 
@@ -109,21 +116,113 @@ Abre este enlace para crear una nueva contraseña:
 
 Si tú no solicitaste esto, ignora este mensaje.
 
-— SenseiFit
+— SenseiFit | Dorians Gym
 """
+            if user.email:
+                subject = "Recupera tu contraseña - SenseiFit"
+                safe_name = escape(user.first_name or "Hola")
+                safe_url = escape(reset_url)
 
-        try:
-            EmailMessage(
-                subject=subject,
-                body=body,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[user.email],
-                reply_to=["soporte@senseifit.app"],
-            ).send(fail_silently=True)
-        except Exception:
-            pass
+                text_body = f"""Hola {user.first_name or ''},
 
-        return ok_response
+            Recibimos una solicitud para restablecer tu contraseña.
+
+            Abre este enlace para crear una nueva contraseña:
+            {reset_url}
+
+            Si tú no solicitaste esto, ignora este mensaje.
+
+            — SenseiFit | Dorians Gym
+            """
+
+                html_body = f"""
+            <!doctype html>
+            <html>
+            <body style="margin:0;padding:0;background:#f6f7fb;font-family:Arial,Helvetica,sans-serif;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f7fb;padding:24px 0;">
+                <tr>
+                    <td align="center">
+                    <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);">
+                        <tr>
+                        <td style="padding:28px 28px 10px 28px;">
+                            <h2 style="margin:0 0 8px 0;color:#111827;font-size:20px;">Recuperar contraseña</h2>
+                            <p style="margin:0;color:#374151;font-size:14px;line-height:20px;">
+                            Hola {safe_name},<br/>
+                            Para crear una nueva contraseña, haz clic en el botón:
+                            </p>
+                        </td>
+                        </tr>
+
+                        <tr>
+                        <td align="center" style="padding:18px 28px;">
+                            <a href="{safe_url}"
+                            style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;
+                                    padding:12px 18px;border-radius:10px;font-size:14px;font-weight:bold;">
+                            Crear nueva contraseña
+                            </a>
+                        </td>
+                        </tr>
+
+                        <tr>
+                        <td style="padding:0 28px 22px 28px;">
+                            <p style="margin:0;color:#6b7280;font-size:12px;line-height:18px;">
+                            Si el botón no funciona, copia y pega este enlace en tu navegador:
+                            <br/>
+                            <span style="word-break:break-all;">{safe_url}</span>
+                            </p>
+                        </td>
+                        </tr>
+
+                        <tr>
+                        <td style="padding:16px 28px;background:#f9fafb;border-top:1px solid #eef2f7;">
+                            <p style="margin:0;color:#6b7280;font-size:12px;line-height:18px;">
+                            Si tú no solicitaste esto, puedes ignorar este mensaje.<br/>
+                            Dorians Gym — SenseiFit
+                            </p>
+                        </td>
+                        </tr>
+
+                    </table>
+                    </td>
+                </tr>
+                </table>
+            </body>
+            </html>
+            """
+
+                msg = EmailMultiAlternatives(
+                    subject=subject,
+                    body=text_body,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to=[user.email],
+                    reply_to=["soporte@senseifit.app"],
+                )
+                msg.attach_alternative(html_body, "text/html")
+                msg.send(fail_silently=True)
+
+                return ok
+
+        # 2) si NO tiene email → WhatsApp (buscamos teléfono desde Client)
+        client = Client.objects.filter(company=company, user=user).first()
+        if client and client.phone:
+            gym_name = getattr(getattr(client, "gym", None), "name", "") or getattr(company, "name", "Dorians Gym")
+            full_name = f"{user.first_name} {user.last_name}".strip() or "Hola"
+
+            send_whatsapp_template(
+                to=client.phone,
+                template_name="sf_welcome_portal",
+                lang="es_EC",
+                components=[{
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": full_name},     # {{1}}
+                        {"type": "text", "text": gym_name},      # {{2}}
+                        {"type": "text", "text": reset_url},     # {{3}}  👈 aquí va reset
+                    ],
+                }],
+            )
+
+        return ok
     
 
 class PasswordResetConfirmView(APIView):
