@@ -18,16 +18,20 @@ class WhatsAppRealTemplateTestView(APIView):
         var2 = request.data.get("var2") or "Dorians Gym"
         var3 = request.data.get("var3") or "https://dorians.senseifit.app/auth/login"
 
-        components = [
-            {
-                "type": "body",
-                "parameters": [
-                    {"type": "text", "text": str(var1)},
-                    {"type": "text", "text": str(var2)},
-                    {"type": "text", "text": str(var3)},
-                ],
-            }
-        ]
+        components = []
+
+        # hello_world NO lleva parámetros
+        if template_name != "hello_world":
+            components = [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": str(var1)},
+                        {"type": "text", "text": str(var2)},
+                        {"type": "text", "text": str(var3)},
+                    ],
+                }
+            ]
 
         result = send_whatsapp_template(
             to=to,
@@ -35,4 +39,5 @@ class WhatsAppRealTemplateTestView(APIView):
             lang=lang,
             components=components,
         )
+
         return Response(result)
