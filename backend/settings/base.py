@@ -180,6 +180,9 @@ WHATSAPP_TEMPLATE_CREDENTIALS = env("WHATSAPP_TEMPLATE_CREDENTIALS", default="he
 WHATSAPP_TEMPLATE_LANG = env("WHATSAPP_TEMPLATE_LANG", default="en_US")
 
 
+WHATSAPP_VERIFY_TOKEN = env("WHATSAPP_VERIFY_TOKEN", default="")
+
+
 # =========================
 # EMAIL (SMTP)
 # =========================

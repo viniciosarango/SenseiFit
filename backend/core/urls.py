@@ -15,8 +15,13 @@ from core.views.client_profile import ClientMeView
 from core.views.companies import CompanyViewSet
 from core.views.email_verification import SendEmailVerificationView
 from core.views.email_verify_confirm import VerifyEmailTokenView
+
 from core.views.whatsapp_test import WhatsAppTestView
 from core.views.whatsapp_real_test import WhatsAppRealTemplateTestView
+
+from core.views.whatsapp_webhook import whatsapp_webhook
+
+
 from core.views.auth import PasswordResetConfirmView
 
 
@@ -60,6 +65,8 @@ urlpatterns = [
     
     path("api/whatsapp/test/", WhatsAppTestView.as_view()),
     path("api/whatsapp/test/real/", WhatsAppRealTemplateTestView.as_view()),
+
+    path("api/whatsapp/webhook/", whatsapp_webhook),
     
     path('api/auth/password-reset/request/', PasswordResetRequestView.as_view()),
     path('api/auth/password-reset/confirm/', PasswordResetConfirmView.as_view()),
