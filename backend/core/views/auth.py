@@ -21,6 +21,9 @@ from core.models import Company
 from django.core.mail import EmailMultiAlternatives
 from django.utils.html import escape
 
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+
 
 UserModel = get_user_model()
 
@@ -41,6 +44,8 @@ class MeView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -76,7 +81,9 @@ class ChangePasswordView(APIView):
         return Response({"detail": "Contraseña actualizada correctamente."})
 
 
+@method_decorator(csrf_exempt, name="dispatch")
 class PasswordResetRequestView(APIView):
+    authentication_classes = []
     permission_classes = []  # público
 
     def post(self, request):
@@ -225,7 +232,9 @@ Si tú no solicitaste esto, ignora este mensaje.
         return ok
     
 
+@method_decorator(csrf_exempt, name="dispatch")
 class PasswordResetConfirmView(APIView):
+    authentication_classes = []
     permission_classes = []  # público
 
     def post(self, request):
