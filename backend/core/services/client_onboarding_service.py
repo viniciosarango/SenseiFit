@@ -9,6 +9,10 @@ from core.services.whatsapp_service import send_whatsapp_template
 from core.models.contact_point import ContactPoint
 from django.conf import settings
 import random
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+
 
 
 User = get_user_model()
@@ -116,6 +120,9 @@ def create_client_with_user_service(
     frontend_url = getattr(settings, "FRONTEND_URL", "").rstrip("/")
     login_url = f"{frontend_url}/auth/login" if frontend_url else None
 
+    reset_url = None
+
+
     if not first_name:
         raise ClientOnboardingError("El nombre es obligatorio.")
 
@@ -187,6 +194,10 @@ def create_client_with_user_service(
             user.must_change_password = True
             user.save(update_fields=["must_change_password"])
 
+            token = PasswordResetTokenGenerator().make_token(user)
+            uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+            reset_url = f"{frontend_url}/auth/reset-password?uid={uidb64}&token={token}"
+
             client.user = user
             client.save(update_fields=["user"])
 
@@ -215,15 +226,15 @@ def create_client_with_user_service(
                     full_name = f"{first_name} {last_name}".strip() or "Hola"
                     send_whatsapp_template(
                         to=client.phone,
-                        template_name="sf_welcome_portal",
-                        lang="es_EC",
+                        template_name=getattr(settings, "WHATSAPP_TEMPLATE_CREDENTIALS", "sf_welcome_portal"),
+                        lang=getattr(settings, "WHATSAPP_TEMPLATE_LANG", "es_EC"),
                         components=[
                             {
                                 "type": "body",
                                 "parameters": [
                                     {"type": "text", "text": full_name},     # {{1}}
                                     {"type": "text", "text": gym_name},      # {{2}}
-                                    {"type": "text", "text": login_url or ""}# {{3}}
+                                    {"type": "text", "text": reset_url or ""}# {{3}}
                                 ],
                             }
                         ],
@@ -263,6 +274,10 @@ def create_client_with_user_service(
         user.must_change_password = True
         user.save(update_fields=["must_change_password"])
 
+        token = PasswordResetTokenGenerator().make_token(user)
+        uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+        reset_url = f"{frontend_url}/auth/reset-password?uid={uidb64}&token={token}"
+
         client = Client.objects.create(
             company=company,
             first_name=first_name,
@@ -301,15 +316,15 @@ def create_client_with_user_service(
                 full_name = f"{first_name} {last_name}".strip() or "Hola"
                 send_whatsapp_template(
                     to=client.phone,
-                    template_name="sf_welcome_portal",
-                    lang="es_EC",
+                    template_name=getattr(settings, "WHATSAPP_TEMPLATE_CREDENTIALS", "sf_welcome_portal"),
+                    lang=getattr(settings, "WHATSAPP_TEMPLATE_LANG", "es_EC"),
                     components=[
                         {
                             "type": "body",
                             "parameters": [
                                 {"type": "text", "text": full_name},     # {{1}}
                                 {"type": "text", "text": gym_name},      # {{2}}
-                                {"type": "text", "text": login_url or ""}# {{3}}
+                                {"type": "text", "text": reset_url or ""}# {{3}}
                             ],
                         }
                     ],
