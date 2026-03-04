@@ -13,7 +13,7 @@ from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 
-
+from core.services.integrations.make_webhook_service import send_make_event
 
 
 
@@ -254,46 +254,7 @@ def create_client_with_user_service(
                     login_url=login_url,
                     reply_to=company.support_email
                 )
-
-          
-
-
-            # ✅ WhatsApp Welcome (si hay teléfono)
-            # try:
-            #     if client.phone:
-            #         gym_name = getattr(gym, "name", "") or "SenseiFit"
-            #         full_name = f"{first_name} {last_name}".strip() or "Hola"
-            #         # send_whatsapp_template(
-            #         #     to=client.phone,
-            #         #     template_name="sf_welcome_portal",
-            #         #     lang="es_EC",
-            #         #     components=[
-            #         #         {
-            #         #             "type": "body",
-            #         #             "parameters": [
-            #         #                 {"type": "text", "text": full_name},     # {{1}}
-            #         #                 {"type": "text", "text": gym_name},      # {{2}}
-            #         #                 {"type": "text", "text": reset_url}  # {{3}}
-            #         #             ],
-            #         #         }
-            #         #     ],
-            #         # )
-
-            #         resp = send_whatsapp_template(
-            #             to=client.phone,
-            #             template_name="sf_welcome_portal",
-            #             lang="es_EC",
-            #             components=[ ... ],
-            #         )
-            #         print("WA_SEND resp:", resp, flush=True)
-
-
-
-            # # except Exception as e:
-            # #     print("WhatsApp error:", e)
-            # except Exception as e:
-            #     print("WhatsApp error:", e, flush=True)
-
+            
     # 🔵 Si NO existe → crear cliente y user
     else:
         # ✅ PIN random de 6 dígitos
@@ -389,5 +350,40 @@ def create_client_with_user_service(
         client=client,
         gym=gym
     )
+
+    # ✅ MAKE webhook: client.created (incluye user + pin)
+    try:
+        send_make_event(
+            event="client.created",
+            data={
+                "client": {
+                    "id": client.id,
+                    "full_name": f"{client.first_name} {client.last_name}".strip(),
+                    "email": client.email,
+                    "phone": client.phone,
+                    "id_number": client.id_number,
+                },
+                "gym": {
+                    "id": getattr(gym, "id", None),
+                    "name": getattr(gym, "name", None),
+                },
+                "company": {
+                    "id": getattr(company, "id", None),
+                    "name": getattr(company, "name", None),
+                },
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                },
+                "temp_password": temp_password,
+                "urls": {
+                    "login_url": login_url,
+                    "reset_url": reset_url,
+                },
+            },
+        )
+    except Exception as e:
+        print("MAKE webhook error:", str(e), flush=True)
 
     return client, None, None

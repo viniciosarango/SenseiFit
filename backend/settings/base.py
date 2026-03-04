@@ -194,3 +194,10 @@ EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="webmaster@localhost")
 EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=5)
+
+# ===========================
+# INTEGRACION MAKE
+# ===========================
+
+MAKE_WEBHOOK_URL = env("MAKE_WEBHOOK_URL", default="")
+MAKE_WEBHOOK_SECRET = env("MAKE_WEBHOOK_SECRET", default="")

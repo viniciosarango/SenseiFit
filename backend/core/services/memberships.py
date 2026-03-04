@@ -136,6 +136,60 @@ def create_membership_service(
 
     membership.refresh_from_db()
 
+    # ✅ MAKE: evento membership.created
+    try:
+        from core.services.integrations.make_webhook_service import send_make_event
+
+        send_make_event(
+            event="membership.created",
+            data={
+                "membership": {
+                    "id": membership.id,
+                    "action": getattr(membership, "action", None),
+                    "operational_status": getattr(membership, "operational_status", None),
+                    "financial_status": getattr(membership, "financial_status", None),
+                    "start_date": str(getattr(membership, "start_date", "") or ""),
+                    "end_date": str(getattr(membership, "end_date", "") or ""),
+                    "original_price": float(getattr(membership, "original_price", 0) or 0),
+                    "discount_percent_applied": float(getattr(membership, "discount_percent_applied", 0) or 0),
+                    "enrollment_fee_applied": float(getattr(membership, "enrollment_fee_applied", 0) or 0),
+                    "total_amount": float(getattr(membership, "total_amount", 0) or 0),
+                    "paid_amount": float(getattr(membership, "paid_amount", 0) or 0),
+                    "balance": float(getattr(membership, "balance", 0) or 0),
+                    "payment_due_date": str(getattr(membership, "payment_due_date", "") or ""),
+                    "sale_type": getattr(membership, "sale_type", None),
+                },
+                "client": {
+                    "id": client.id,
+                    "full_name": f"{client.first_name} {client.last_name}".strip(),
+                    "email": getattr(client, "email", None),
+                    "phone": getattr(client, "phone", None),
+                    "id_number": getattr(client, "id_number", None),
+                },
+                "gym": {
+                    "id": gym.id,
+                    "name": getattr(gym, "name", ""),
+                },
+                "plan": {
+                    "id": plan.id,
+                    "name": getattr(plan, "name", ""),
+                    "plan_type": getattr(plan, "plan_type", ""),
+                    "duration_days": getattr(plan, "duration_days", None),
+                    "price": float(getattr(plan, "price", 0) or 0),
+                },
+                "company": {
+                    "id": getattr(getattr(gym, "company", None), "id", None),
+                    "name": getattr(getattr(gym, "company", None), "name", None),
+                },
+                "created_by": {
+                    "id": getattr(created_by, "id", None),
+                    "username": getattr(created_by, "username", None),
+                },
+            },
+        )
+    except Exception as e:
+        print("MAKE membership.created error:", str(e), flush=True)
+
     # --------------------------------------------------------
     # Reordenar cola TIME si se forzó ACTIVE
     # --------------------------------------------------------
