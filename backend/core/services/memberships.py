@@ -143,9 +143,29 @@ def create_membership_service(
     try:
         from core.services.integrations.make_webhook_service import send_make_event
 
+        payment_method = None
+        if payment_method_id:
+            try:
+                payment_method = PaymentMethod.objects.get(id=payment_method_id)
+            except PaymentMethod.DoesNotExist:
+                payment_method = None
+
         send_make_event(
             event="membership.created",
             data={
+
+                "payment_method": {
+                    "id": getattr(payment_method, "id", None),
+                    "name": getattr(payment_method, "name", None),
+                } if payment_method else None,
+
+                "initial_payment": {
+                    "amount": float(initial_paid or 0),
+                    "method_id": getattr(payment_method, "id", None),
+                    "method_name": getattr(payment_method, "name", None),
+                } if initial_paid > 0 else None,
+
+
                 "membership": {
                     "id": membership.id,
                     "action": getattr(membership, "action", None),
