@@ -376,6 +376,7 @@ def create_client_with_user_service(
 
                     "country": client.country,
                     "document_type": client.document_type,
+                    "document_type_label": client.get_document_type_display() if client.document_type else None,
                     "id_number": client.id_number,
 
                     "hikvision_id": client.hikvision_id,
@@ -384,9 +385,10 @@ def create_client_with_user_service(
                     "phone": client.phone,
 
                     "birth_date": birth_date_str,
-                    "gender": client.gender,  # ✅ AQUÍ VA EL GÉNERO (M/F/O)
+                    "gender": client.gender,
+                    "gender_label": client.get_gender_display() if client.gender else None,
 
-                    "photo_path": photo_path,         # ej: /media/clients/xxx.jpg
+                    "photo_path": photo_path,         
                     "is_active": client.is_active,
 
                     "total_referrals": client.total_referrals,
