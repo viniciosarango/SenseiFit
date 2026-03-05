@@ -93,6 +93,8 @@ def create_membership_service(
     # 5) Calcular fecha de fin
     end_date = start_date + timedelta(days=plan.duration_days - 1)
 
+    renovation_date = end_date + timedelta(days=1)
+
     discount_percent = discount_percent or 0
     enrollment_fee = enrollment_fee or 0
 
@@ -107,6 +109,7 @@ def create_membership_service(
         plan=plan,
         start_date=start_date,
         end_date=end_date,
+        renovation_date=renovation_date,
         action=action,
         original_price=original_price,
         discount_percent_applied=discount_percent_applied,
@@ -209,6 +212,8 @@ def create_membership_service(
                     # "end_date": str(getattr(membership, "end_date", "") or ""),
                     "start_date": str(membership.start_date) if getattr(membership, "start_date", None) else None,
                     "end_date": str(membership.end_date) if getattr(membership, "end_date", None) else None,
+                    "renovation_date": str(getattr(membership, "renovation_date", None)) if getattr(membership, "renovation_date", None) else None,
+
                     "original_price": float(getattr(membership, "original_price", 0) or 0),
                     
                     #"discount_percent_applied": float(getattr(membership, "discount_percent_applied", 0) or 0),

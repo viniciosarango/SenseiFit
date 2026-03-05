@@ -75,6 +75,7 @@ class Membership(models.Model):
     # ----------------------
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
+    renovation_date = models.DateField(null=True, blank=True, db_index=True)
     payment_due_date = models.DateField(null=True, blank=True)
 
     

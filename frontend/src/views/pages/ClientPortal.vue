@@ -208,6 +208,7 @@ const sendEmailVerification = async () => {
               <Tag :value="membership?.status || 'SIN MEMBRESÍA'" :severity="statusSeverity" />
               <span v-if="membership?.plan_name">Plan: <b>{{ membership.plan_name }}</b></span>
               <span v-if="membership?.end_date">Vence: <b>{{ membership.end_date }}</b></span>
+              <span v-if="membership?.renovation_date">Fecha de Renovación: <b>{{ membership.renovation_date }}</b></span>
             </div>
           
           </div>
@@ -269,20 +270,29 @@ const sendEmailVerification = async () => {
 
           <div class="grid">
             <div class="card text-center">
-            <div class="text-500">Saldo pendiente</div>
-            <div class="text-2xl font-bold text-red-500">
-              ${{ membership?.balance || 0 }}
+              <div class="text-500">Saldo pendiente</div>
+              <div class="text-2xl font-bold text-red-500">
+                ${{ membership?.balance || 0 }}
+              </div>
+            </div>
+
+          <div class="col-12 md:col-3">
+            <div class="card text-center">
+              <div class="text-500">Pagar saldo pendiente hasta</div>
+              <div class="text-xl font-bold">
+                {{ membership?.due_date || '-' }}
+              </div>
             </div>
           </div>
 
-            <div class="col-12 md:col-3">
-        <div class="card text-center">
-          <div class="text-500">Pagar hasta</div>
-          <div class="text-xl font-bold">
-            {{ membership?.due_date || '-' }}
+          <div class="col-12 md:col-3">
+            <div class="card text-center">
+              <div class="text-500">Fecha de Renovación</div>
+              <div class="text-xl font-bold">
+                {{ membership?.renovation_date || '-' }}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
           <div class="card text-center">
           <div class="text-500">Estado</div>

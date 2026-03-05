@@ -135,7 +135,8 @@ class ClientSerializer(serializers.ModelSerializer):
                 "financial_status": membership.financial_status,
                 "balance": float(membership.balance),
                 "due_date": membership.payment_due_date,
-                "end_date": membership.end_date
+                "end_date": membership.end_date,
+                "renovation_date": membership.renovation_date,
             }
 
         return {"has_active": False, "message": "Sin Membresía Activa"}

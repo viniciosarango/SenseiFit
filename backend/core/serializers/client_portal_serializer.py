@@ -81,6 +81,7 @@ class ClientPortalSerializer(serializers.ModelSerializer):
             "balance": float(m.balance),
             "due_date": m.payment_due_date,
             "end_date": m.end_date,
+            "renovation_date": m.renovation_date,
             "gym_name": (m.gym.name if m.gym else None),
             "sale_type": getattr(m, "sale_type", None),
         }
@@ -100,6 +101,7 @@ class ClientPortalSerializer(serializers.ModelSerializer):
                 "balance": str(m.balance),
                 "gym_name": (m.gym.name if m.gym else None),
                 "sale_type": getattr(m, "sale_type", None),
+                "renovation_date": str(getattr(m, "renovation_date", "") or ""),
             }
             for m in qs
         ]
