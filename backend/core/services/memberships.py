@@ -93,6 +93,9 @@ def create_membership_service(
     # 5) Calcular fecha de fin
     end_date = start_date + timedelta(days=plan.duration_days - 1)
 
+    discount_percent = discount_percent or 0
+    enrollment_fee = enrollment_fee or 0
+
     original_price = money(plan.price)
     discount_percent_applied = money(discount_percent)
     enrollment_fee_applied = money(enrollment_fee)
@@ -148,16 +151,24 @@ def create_membership_service(
                     "action": getattr(membership, "action", None),
                     "operational_status": getattr(membership, "operational_status", None),
                     "financial_status": getattr(membership, "financial_status", None),
-                    "start_date": str(getattr(membership, "start_date", "") or ""),
-                    "end_date": str(getattr(membership, "end_date", "") or ""),
+                    # "start_date": str(getattr(membership, "start_date", "") or ""),
+                    # "end_date": str(getattr(membership, "end_date", "") or ""),
+                    "start_date": str(membership.start_date) if getattr(membership, "start_date", None) else None,
+                    "end_date": str(membership.end_date) if getattr(membership, "end_date", None) else None,
                     "original_price": float(getattr(membership, "original_price", 0) or 0),
-                    "discount_percent_applied": float(getattr(membership, "discount_percent_applied", 0) or 0),
-                    "enrollment_fee_applied": float(getattr(membership, "enrollment_fee_applied", 0) or 0),
+                    
+                    #"discount_percent_applied": float(getattr(membership, "discount_percent_applied", 0) or 0),
+                    "discount_percent_applied": float(membership.discount_percent_applied or 0),
+
+                    #"enrollment_fee_applied": float(getattr(membership, "enrollment_fee_applied", 0) or 0),
+                    "enrollment_fee_applied": float(membership.enrollment_fee_applied or 0),
+                    
                     "total_amount": float(getattr(membership, "total_amount", 0) or 0),
                     "paid_amount": float(getattr(membership, "paid_amount", 0) or 0),
                     "balance": float(getattr(membership, "balance", 0) or 0),
-                    "payment_due_date": str(getattr(membership, "payment_due_date", "") or ""),
-                    "sale_type": getattr(membership, "sale_type", None),
+                    #"payment_due_date": str(getattr(membership, "payment_due_date", "") or ""),
+                    "payment_due_date": str(membership.payment_due_date) if getattr(membership, "payment_due_date", None) else None,
+                    "sale_type": getattr(membership, "sale_type", None) or None,
                 },
                 "client": {
                     "id": client.id,
@@ -174,7 +185,8 @@ def create_membership_service(
                     "id": plan.id,
                     "name": getattr(plan, "name", ""),
                     "plan_type": getattr(plan, "plan_type", ""),
-                    "duration_days": getattr(plan, "duration_days", None),
+                    #"duration_days": getattr(plan, "duration_days", None),
+                    "duration_days": int(getattr(plan, "duration_days", 0) or 0),
                     "price": float(getattr(plan, "price", 0) or 0),
                 },
                 "company": {
