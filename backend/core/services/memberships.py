@@ -224,6 +224,11 @@ def create_membership_service(
                     "payment_due_date": str(membership.payment_due_date) if getattr(membership, "payment_due_date", None) else None,
                     "sale_type": getattr(membership, "sale_type", None) or None,
                     "notes": getattr(membership, "notes", "") or "",
+
+                    "courtesy_qty": int(getattr(membership, "courtesy_qty", 0) or 0),
+                    "courtesy_used": int(getattr(membership, "courtesy_used", 0) or 0),
+                    "courtesy_balance": int((getattr(membership, "courtesy_qty", 0) or 0) - (getattr(membership, "courtesy_used", 0) or 0)),
+
                 },
                 "client": {
                     "id": client.id,
