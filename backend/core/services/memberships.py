@@ -139,6 +139,40 @@ def create_membership_service(
 
     membership.refresh_from_db()
 
+    
+
+    # --------------------------------------------------------
+    # Reordenar cola TIME si se forzó ACTIVE
+    # --------------------------------------------------------
+    if force_operational_status == "ACTIVE" and plan.plan_type == "TIME":
+        scheduled_times = Membership.objects.filter(
+            client=client,
+            gym=gym,
+            plan__plan_type="TIME",
+            operational_status="SCHEDULED"
+        ).order_by("start_date")
+
+        last_end_date = membership.end_date
+
+        for m in scheduled_times:
+            duration = m.plan.duration_days
+
+            new_start = last_end_date + timedelta(days=1)
+            new_end = new_start + timedelta(days=duration - 1)
+
+            m.start_date = new_start
+            m.end_date = new_end
+            m.save(update_fields=["start_date", "end_date"])
+
+            last_end_date = new_end
+
+    # Plazo de pago si quedó deuda
+    if membership.balance > 0 and not membership.payment_due_date:
+        grace_days = membership.payment_grace_days_override or membership.gym.default_payment_grace_days
+        base_date = membership.start_date if membership.operational_status == "SCHEDULED" and membership.start_date else today
+        membership.payment_due_date = base_date + timedelta(days=grace_days)
+        membership.save(update_fields=['payment_due_date'])
+
     # ✅ MAKE: evento membership.created
     try:
         from core.services.integrations.make_webhook_service import send_make_event
@@ -189,6 +223,7 @@ def create_membership_service(
                     #"payment_due_date": str(getattr(membership, "payment_due_date", "") or ""),
                     "payment_due_date": str(membership.payment_due_date) if getattr(membership, "payment_due_date", None) else None,
                     "sale_type": getattr(membership, "sale_type", None) or None,
+                    "notes": getattr(membership, "notes", "") or "",
                 },
                 "client": {
                     "id": client.id,
@@ -222,37 +257,8 @@ def create_membership_service(
     except Exception as e:
         print("MAKE membership.created error:", str(e), flush=True)
 
-    # --------------------------------------------------------
-    # Reordenar cola TIME si se forzó ACTIVE
-    # --------------------------------------------------------
-    if force_operational_status == "ACTIVE" and plan.plan_type == "TIME":
-        scheduled_times = Membership.objects.filter(
-            client=client,
-            gym=gym,
-            plan__plan_type="TIME",
-            operational_status="SCHEDULED"
-        ).order_by("start_date")
 
-        last_end_date = membership.end_date
-
-        for m in scheduled_times:
-            duration = m.plan.duration_days
-
-            new_start = last_end_date + timedelta(days=1)
-            new_end = new_start + timedelta(days=duration - 1)
-
-            m.start_date = new_start
-            m.end_date = new_end
-            m.save(update_fields=["start_date", "end_date"])
-
-            last_end_date = new_end
-
-    # Plazo de pago si quedó deuda
-    if membership.balance > 0 and not membership.payment_due_date:
-        grace_days = membership.payment_grace_days_override or membership.gym.default_payment_grace_days
-        base_date = membership.start_date if membership.operational_status == "SCHEDULED" and membership.start_date else today
-        membership.payment_due_date = base_date + timedelta(days=grace_days)
-        membership.save(update_fields=['payment_due_date'])
+    
 
     return membership
 
