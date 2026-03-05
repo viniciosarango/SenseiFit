@@ -351,32 +351,78 @@ def create_client_with_user_service(
         gym=gym
     )
 
-    # ✅ MAKE webhook: client.created (incluye user + pin)
+    # ✅ MAKE webhook: client.created (payload completo según tu modelo Client)
     try:
+        # photo_url absoluto si hay request no lo tenemos aquí,
+        # así que mandamos .url (relativo) y también un "photo_url" si FRONTEND_URL existe.
+        photo_path = None
+        try:
+            if client.photo and getattr(client.photo, "url", None):
+                photo_path = client.photo.url
+        except Exception:
+            photo_path = None
+
+        # Normalizamos birth_date a string YYYY-MM-DD (o None)
+        birth_date_str = str(client.birth_date) if client.birth_date else None
+
         send_make_event(
             event="client.created",
             data={
                 "client": {
                     "id": client.id,
-                    "full_name": f"{client.first_name} {client.last_name}".strip(),
+                    "first_name": client.first_name,
+                    "last_name": client.last_name,
+                    "full_name": client.full_name,
+
+                    "country": client.country,
+                    "document_type": client.document_type,
+                    "id_number": client.id_number,
+
+                    "hikvision_id": client.hikvision_id,
+
                     "email": client.email,
                     "phone": client.phone,
-                    "id_number": client.id_number,
+
+                    "birth_date": birth_date_str,
+                    "gender": client.gender,  # ✅ AQUÍ VA EL GÉNERO (M/F/O)
+
+                    "photo_path": photo_path,         # ej: /media/clients/xxx.jpg
+                    "is_active": client.is_active,
+
+                    "total_referrals": client.total_referrals,
+                    "courtesy_pass_balance": client.courtesy_pass_balance,
+                    "referred_by_id": client.referred_by_id,
+
+                    "created_at": client.created_at.isoformat() if client.created_at else None,
                 },
+
+                "company": {
+                    "id": company.id if company else None,
+                    "name": getattr(company, "name", None),
+                    "support_email": getattr(company, "support_email", None),
+                },
+
                 "gym": {
                     "id": getattr(gym, "id", None),
                     "name": getattr(gym, "name", None),
                 },
-                "company": {
-                    "id": getattr(company, "id", None),
-                    "name": getattr(company, "name", None),
-                },
+
                 "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email,
+                    "id": user.id if user else None,
+                    "username": getattr(user, "username", None),
+                    "email": getattr(user, "email", None),
+                    "first_name": getattr(user, "first_name", None),
+                    "last_name": getattr(user, "last_name", None),
+                    "role": getattr(user, "role", None),
+                    "must_change_password": getattr(user, "must_change_password", None),
+                    "is_active": getattr(user, "is_active", None),
+                    "date_joined": user.date_joined.isoformat() if getattr(user, "date_joined", None) else None,
+                    "last_login": user.last_login.isoformat() if getattr(user, "last_login", None) else None,
                 },
+
+                # credenciales útiles para Kommo / Salesbot
                 "temp_password": temp_password,
+
                 "urls": {
                     "login_url": login_url,
                     "reset_url": reset_url,
