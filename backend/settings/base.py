@@ -182,6 +182,8 @@ WHATSAPP_TEMPLATE_LANG = env("WHATSAPP_TEMPLATE_LANG", default="en_US")
 
 WHATSAPP_VERIFY_TOKEN = env("WHATSAPP_VERIFY_TOKEN", default="")
 
+WHATSAPP_CLOUD_ENABLED = env.bool("WHATSAPP_CLOUD_ENABLED", default=True)
+
 
 # =========================
 # EMAIL (SMTP)

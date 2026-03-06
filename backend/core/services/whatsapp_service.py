@@ -9,6 +9,10 @@ def send_whatsapp_template(*, to: str, template_name: str, lang: str = "en_US", 
     - Si Meta responde error: NO explota, devuelve skipped con detalle.
     """
 
+    # ✅ APAGADOR GLOBAL (no toca nada más)
+    if not getattr(settings, "WHATSAPP_CLOUD_ENABLED", True):
+        return {"skipped": True, "reason": "WHATSAPP_CLOUD_ENABLED is False"}
+
     phone_number_id = getattr(settings, "WHATSAPP_PHONE_NUMBER_ID", "") or ""
     token = getattr(settings, "WHATSAPP_ACCESS_TOKEN", "") or ""
     version = getattr(settings, "WHATSAPP_API_VERSION", "v22.0") or "v22.0"
