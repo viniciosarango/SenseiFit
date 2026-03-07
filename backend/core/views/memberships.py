@@ -1,18 +1,27 @@
 from rest_framework.decorators import action
-from rest_framework import viewsets, permissions, status
+from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
+
 from django.utils import timezone
+
 from core.models import Membership, ClientGym, Gym, Company
 from core.serializers.membership import MembershipSerializer, MembershipHistorySerializer
-from core.services.memberships import create_membership_service, MembershipError, cancel_membership_service
-from core.services.payments import register_payment, PaymentError
-from .base import CompanyGymScopedViewSet
-from core.services.memberships import activate_membership_now
+
 from core.services.memberships import (
+    create_membership_service,
+    cancel_membership_service,
+    activate_membership_now,
     freeze_membership_service,
-    unfreeze_membership_service
+    unfreeze_membership_service,
+    upgrade_membership_service,
+    MembershipError,
 )
+
+from core.services.payments import register_payment, PaymentError
+
+from .base import CompanyGymScopedViewSet
+
 
 
 class MembershipViewSet(CompanyGymScopedViewSet):
@@ -154,6 +163,7 @@ class MembershipViewSet(CompanyGymScopedViewSet):
                 requested_start_date=data.get("requested_start_date"),
                 created_by=user,
                 discount_percent=data.get("discount_percent_applied", 0),
+                enrollment_fee=data.get("enrollment_fee_applied", 0),
                 paid_amount=data.get("paid_amount", 0),
                 payment_method_id=data.get("payment_method_id"),
                 notes=data.get("notes", ""),
@@ -267,4 +277,34 @@ class MembershipViewSet(CompanyGymScopedViewSet):
             raise ValidationError({"detail": str(e)})
         
 
+    @action(detail=True, methods=["post"], url_path="upgrade")
+    def upgrade(self, request, pk=None):
+        membership = self.get_object()
+
+        new_plan_id = request.data.get("plan_id")
+        payment_method_id = request.data.get("payment_method_id")
+        paid_amount = request.data.get("paid_amount", 0)
+        sale_type = request.data.get("sale_type", "CASH")
+        notes = request.data.get("notes", "Upgrade de membresía")
+
+        if not new_plan_id:
+            raise ValidationError({"plan_id": "Debe indicar el plan destino para el upgrade."})
+
+        try:
+            upgraded = upgrade_membership_service(
+                client=membership.client,
+                gym=membership.gym,
+                new_plan_id=new_plan_id,
+                payment_method_id=payment_method_id,
+                created_by=request.user,
+                notes=notes,
+                paid_amount=paid_amount,
+                sale_type=sale_type,
+            )
+
+            serializer = self.get_serializer(upgraded)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except MembershipError as e:
+            raise ValidationError({"detail": str(e)})
         

@@ -1,6 +1,7 @@
 from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
+from datetime import timedelta
 from core.models import Membership, Payment, PaymentMethod
 from django.db.models import Sum
 
@@ -88,16 +89,19 @@ def recalc_membership_finance(membership: Membership) -> Membership:
     )
 
     membership.paid_amount = total_paid
+
+    if membership.sale_type == "CREDIT":
+        if total_paid < membership.total_amount and not membership.payment_due_date:
+            membership.payment_due_date = timezone.localdate() + timedelta(days=membership.gym.default_payment_grace_days)
+        elif total_paid >= membership.total_amount:
+            membership.payment_due_date = None
+
     membership.save()
 
     if membership.sale_type == "CASH" and membership.balance > 0:
         raise PaymentError(
             "Inconsistencia de dominio: una membresía CASH no puede mantener saldo pendiente."
         )
-
-    if membership.balance == 0:
-        membership.payment_due_date = None
-        membership.save(update_fields=["payment_due_date"])
 
     return membership
 

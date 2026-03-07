@@ -65,7 +65,7 @@ def create_membership_service(
         last_mem = Membership.objects.filter(
             client=client,
             gym=gym,
-            plan__plan_type="TIME",
+            plan__plan_type=plan.plan_type,
             operational_status__in=["ACTIVE", "SCHEDULED", "FROZEN"]
         ).order_by("-end_date").first()
 
@@ -143,6 +143,7 @@ def create_membership_service(
         original_price=original_price,
         discount_percent_applied=discount_percent_applied,
         enrollment_fee_applied=enrollment_fee_applied,
+        total_amount=total_amount,
         paid_amount=Decimal("0.00"),
         operational_status=operational_status,
         created_by=created_by,
@@ -167,9 +168,13 @@ def create_membership_service(
         )
 
     if membership.start_date and membership.end_date:
-        sync_hikvision_async(membership)
+        try:
+            sync_hikvision_async(membership)
+        except Exception as e:
+            print("Hikvision sync error:", str(e), flush=True)
 
     membership.refresh_from_db()
+
 
     
 
@@ -180,7 +185,7 @@ def create_membership_service(
         scheduled_times = Membership.objects.filter(
             client=client,
             gym=gym,
-            plan__plan_type="TIME",
+            plan__plan_type=plan.plan_type,
             operational_status="SCHEDULED"
         ).order_by("start_date")
 
@@ -517,3 +522,87 @@ def unfreeze_membership_service(*, membership: Membership, requested_by, pin: st
     sync_hikvision_async(membership)
 
     return membership
+
+
+@transaction.atomic
+def upgrade_membership_service(
+    *,
+    client,
+    gym,
+    new_plan_id,
+    payment_method_id,
+    created_by,
+    notes="Upgrade de membresía",
+    paid_amount=0,
+    sale_type="CASH",
+):
+
+    today = timezone.localdate()
+
+    new_plan = Plan.objects.get(id=new_plan_id)
+
+    active_membership = Membership.objects.filter(
+        client=client,
+        gym=gym,
+        operational_status="ACTIVE",
+        plan__plan_type=new_plan.plan_type,
+    ).select_related("plan").first()
+
+    if not active_membership:
+        raise MembershipError("El cliente no tiene una membresía activa para hacer upgrade.")
+
+    if active_membership.balance > 0 or active_membership.financial_status != "PAID":
+        raise MembershipError("No se puede hacer upgrade sobre una membresía con saldo pendiente.")
+
+    if new_plan.gym_id != gym.id:
+        raise MembershipError("El plan no pertenece a este gimnasio.")
+
+    if new_plan.plan_type != active_membership.plan.plan_type:
+        raise MembershipError("El upgrade solo es permitido entre planes del mismo tipo.")
+
+    if active_membership.plan_id == new_plan.id:
+        raise MembershipError("El nuevo plan no puede ser el mismo plan actual.")
+
+    if active_membership.plan.plan_type == "TIME":
+        remaining_days = (active_membership.end_date - today).days
+        if remaining_days < 0:
+            remaining_days = 0
+
+        daily_price = active_membership.final_price / active_membership.plan.duration_days
+        upgrade_credit = (daily_price * remaining_days).quantize(Decimal("0.01"))
+
+    elif active_membership.plan.plan_type == "SESSIONS":
+        total_sessions = active_membership.sessions_total or 0
+        remaining_sessions = active_membership.sessions_remaining or 0
+
+        if total_sessions <= 0:
+            raise MembershipError("El plan actual no tiene sesiones válidas para calcular upgrade.")
+
+        session_price = active_membership.final_price / total_sessions
+        upgrade_credit = (session_price * remaining_sessions).quantize(Decimal("0.01"))
+
+    else:
+        raise MembershipError("Tipo de plan no soportado para upgrade.")
+
+    active_membership.operational_status = "CANCELLED"
+    active_membership.end_date = today
+    active_membership.save(update_fields=["operational_status", "end_date"])
+
+    new_membership = create_membership_service(
+        client=client,
+        gym=gym,
+        plan_id=new_plan.id,
+        requested_start_date=today,
+        created_by=created_by,
+        notes=notes,
+        sale_type=sale_type,
+        paid_amount=paid_amount,
+        payment_method_id=payment_method_id,
+        force_operational_status="ACTIVE",
+    )
+
+    new_membership.upgrade_credit = upgrade_credit
+    new_membership.action = "UPGRADE"
+    new_membership.save()
+
+    return new_membership

@@ -114,3 +114,33 @@ def test_renewal_is_scheduled_after_active(
     assert second.operational_status == "SCHEDULED"
     assert second.start_date == first.end_date + timezone.timedelta(days=1)
     assert second.action == "RENEWAL"
+
+
+@pytest.mark.django_db
+def test_credit_membership_with_enrollment_fee(
+    client_factory, gym_factory, plan_factory, user_factory, payment_method_factory
+):
+    gym = gym_factory()
+    client = client_factory(gym=gym)
+    plan = plan_factory(gym=gym, duration_days=30, price=Decimal("29.00"))
+    user = user_factory(gym=gym)
+    payment_method = payment_method_factory(gym=gym)
+
+    membership = create_membership_service(
+        client=client,
+        gym=gym,
+        plan_id=plan.id,
+        created_by=user,
+        sale_type="CREDIT",
+        enrollment_fee=Decimal("5.00"),
+        paid_amount=Decimal("10.00"),
+        payment_method_id=payment_method.id,
+        credit_days=7,
+    )
+
+    assert membership.original_price == Decimal("29.00")
+    assert membership.enrollment_fee_applied == Decimal("5.00")
+    assert membership.total_amount == Decimal("34.00")
+    assert membership.paid_amount == Decimal("10.00")
+    assert membership.balance == Decimal("24.00")
+    assert membership.financial_status == "PARTIAL"
