@@ -33,7 +33,8 @@ def create_membership_service(
     notes="",
     force_operational_status=None,
     sale_type="CASH",
-    payment_grace_days_override=None,
+    payment_due_date=None,
+    credit_days=None,
 ):
     # 1) Obtener Plan
     try:
@@ -47,10 +48,10 @@ def create_membership_service(
     today = timezone.localdate()
     start_date = requested_start_date or today
 
-    # ✅ Guardamos el pago inicial aparte (NO se escribe en membership directo)
     initial_paid = money(paid_amount)
+    if sale_type not in {"CASH", "CREDIT"}:
+        raise MembershipError("Tipo de venta inválido.")
 
-    # 2) Buscar membresía actualmente ACTIVA (Seguridad del búnker)
     active_mem = Membership.objects.filter(
         client=client,
         gym=gym,
@@ -58,14 +59,16 @@ def create_membership_service(
         plan__plan_type=plan.plan_type
     ).first()
 
-    # 3) Lógica de Fila de Renovación
+
     last_mem = None
     if plan.plan_type == 'TIME':
         last_mem = Membership.objects.filter(
             client=client,
             gym=gym,
-            operational_status__in=["ACTIVE", "SCHEDULED"]
+            plan__plan_type="TIME",
+            operational_status__in=["ACTIVE", "SCHEDULED", "FROZEN"]
         ).order_by("-end_date").first()
+
 
     # 4) DETERMINACIÓN DE ESTADO Y FECHAS
     if force_operational_status:
@@ -101,7 +104,33 @@ def create_membership_service(
     original_price = money(plan.price)
     discount_percent_applied = money(discount_percent)
     enrollment_fee_applied = money(enrollment_fee)
-    
+
+    discount_amount = (original_price * discount_percent_applied / Decimal("100")).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
+    final_price = (original_price - discount_amount).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
+    total_amount = (final_price + enrollment_fee_applied).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
+
+    if sale_type == "CASH":
+        if initial_paid != total_amount:
+            raise MembershipError("Una venta CASH exige pago total exacto.")
+        resolved_payment_due_date = None
+
+    elif sale_type == "CREDIT":
+        if initial_paid > total_amount:
+            raise MembershipError("El abono inicial no puede exceder el total de la membresía.")
+
+        if initial_paid < total_amount:
+            if payment_due_date and payment_due_date <= today:
+                raise MembershipError("La fecha límite de pago debe ser posterior a hoy.")            
+            if payment_due_date:
+                resolved_payment_due_date = payment_due_date
+            elif credit_days is not None:
+                if int(credit_days) <= 0:
+                    raise MembershipError("Los días de crédito deben ser mayores a 0.")
+                resolved_payment_due_date = today + timedelta(days=int(credit_days))            
+            else:
+                resolved_payment_due_date = today + timedelta(days=gym.default_payment_grace_days)
+        else:
+            resolved_payment_due_date = None
     
     membership = Membership.objects.create(
         client=client,
@@ -117,9 +146,9 @@ def create_membership_service(
         paid_amount=Decimal("0.00"),
         operational_status=operational_status,
         created_by=created_by,
-        notes=notes,sale_type=sale_type,
-        payment_grace_days_override=payment_grace_days_override,
-
+        notes=notes,
+        sale_type=sale_type,
+        payment_due_date=resolved_payment_due_date,
     )
 
     # 7) Pago inicial (si existe)
@@ -165,16 +194,9 @@ def create_membership_service(
 
             m.start_date = new_start
             m.end_date = new_end
-            m.save(update_fields=["start_date", "end_date"])
+            m.save(update_fields=["start_date", "end_date", "renovation_date"])
 
             last_end_date = new_end
-
-    # Plazo de pago si quedó deuda
-    if membership.balance > 0 and not membership.payment_due_date:
-        grace_days = membership.payment_grace_days_override or membership.gym.default_payment_grace_days
-        base_date = membership.start_date if membership.operational_status == "SCHEDULED" and membership.start_date else today
-        membership.payment_due_date = base_date + timedelta(days=grace_days)
-        membership.save(update_fields=['payment_due_date'])
 
     # ✅ MAKE: evento membership.created
     try:
@@ -225,9 +247,9 @@ def create_membership_service(
                     "total_amount": float(getattr(membership, "total_amount", 0) or 0),
                     "paid_amount": float(getattr(membership, "paid_amount", 0) or 0),
                     "balance": float(getattr(membership, "balance", 0) or 0),
-                    #"payment_due_date": str(getattr(membership, "payment_due_date", "") or ""),
-                    "payment_due_date": str(membership.payment_due_date) if getattr(membership, "payment_due_date", None) else None,
+                    
                     "sale_type": getattr(membership, "sale_type", None) or None,
+                    "payment_due_date": str(membership.payment_due_date) if membership.payment_due_date else None,
                     "notes": getattr(membership, "notes", "") or "",
 
                     "courtesy_qty": int(getattr(membership, "courtesy_qty", 0) or 0),
@@ -287,12 +309,14 @@ def cancel_membership_service(*, membership, requested_by, pin: str, reason: str
     if str(pin) != str(expected_pin):
         raise MembershipError("PIN incorrecto. No autorizado para cancelar.")
 
-    # 3) Cancelar
+    # 3) cancelar
     membership.operational_status = "CANCELLED"
-    # opcional: guardar reason en notes sin romper nada
+    membership.payment_due_date = None
+
     if reason:
         membership.notes = f"{membership.notes or ''} | CANCELLED: {reason}".strip()
-    membership.save(update_fields=["operational_status", "notes"])
+
+    membership.save(update_fields=["operational_status", "payment_due_date", "notes"])    
 
     # 4) (Opcional) sync hikvision para cortar acceso
     sync_hikvision_async(membership)
@@ -313,8 +337,9 @@ def activate_membership_now(*, membership: Membership, activated_by):
     existing_active = Membership.objects.filter(
         client=membership.client,
         gym=membership.gym,
+        plan__plan_type=membership.plan.plan_type,
         operational_status="ACTIVE"
-    ).exists()
+    ).exclude(id=membership.id).exists()
 
     if existing_active:
         raise MembershipError("Ya existe una membresía activa para este cliente.")
@@ -327,6 +352,7 @@ def activate_membership_now(*, membership: Membership, activated_by):
     membership.save(update_fields=[
         "start_date",
         "end_date",
+        "renovation_date",
         "operational_status"
     ])
 
@@ -338,6 +364,7 @@ def activate_membership_now(*, membership: Membership, activated_by):
         .filter(
             client=membership.client,
             gym=membership.gym,
+            plan__plan_type=membership.plan.plan_type,
             operational_status="SCHEDULED",
             start_date__gt=membership.start_date
         )
@@ -347,7 +374,7 @@ def activate_membership_now(*, membership: Membership, activated_by):
     for future in future_queue:
         future.start_date = next_start
         future.end_date = next_start + timedelta(days=future.plan.duration_days - 1)
-        future.save(update_fields=["start_date", "end_date"])
+        future.save(update_fields=["start_date", "end_date", "renovation_date"])
         next_start = future.end_date + timedelta(days=1)
 
     sync_hikvision_async(membership)
@@ -378,6 +405,18 @@ def freeze_membership_service(*, membership: Membership, requested_by, pin: str)
     if membership.operational_status != "ACTIVE":
         raise MembershipError("Solo una membresía activa puede congelarse.")
     
+    has_future_queue = Membership.objects.filter(
+        client=membership.client,
+        gym=membership.gym,
+        plan__plan_type=membership.plan.plan_type,
+        operational_status="SCHEDULED"
+    ).exists()
+
+    if has_future_queue:
+        raise MembershipError(
+            "No se puede congelar una membresía que ya tiene renovaciones programadas en cola."
+        )
+
     if membership.balance > 0:
         raise MembershipError(
             f"No se puede congelar. Tiene saldo pendiente de ${membership.balance}."
@@ -425,6 +464,14 @@ def unfreeze_membership_service(*, membership: Membership, requested_by, pin: st
 
     frozen_days = (today - membership.freeze_start_date).days
 
+    future_queue = Membership.objects.filter(
+        client=membership.client,
+        gym=membership.gym,
+        plan__plan_type=membership.plan.plan_type,
+        operational_status="SCHEDULED",
+        start_date__gt=membership.start_date
+    ).order_by("start_date")
+
     if frozen_days <= 0:
         raise MembershipError("No se puede descongelar el mismo día.")
 
@@ -432,11 +479,13 @@ def unfreeze_membership_service(*, membership: Membership, requested_by, pin: st
         membership.operational_status = "INACTIVE"
         membership.freeze_start_date = None
         membership.total_freeze_days = 30
+        
         membership.save(update_fields=[
             "operational_status",   
             "freeze_start_date",
             "total_freeze_days"
         ])
+
         raise MembershipError("Límite de 30 días alcanzado. La membresía quedó inactiva.")
 
     membership.end_date += timedelta(days=frozen_days)
@@ -448,12 +497,21 @@ def unfreeze_membership_service(*, membership: Membership, requested_by, pin: st
 
     membership.save(update_fields=[
         "end_date",
+        "renovation_date",
         "total_freeze_days",
         "operational_status",
         "freeze_start_date",
         "unfreeze_requested_by",
         "unfreeze_timestamp"
     ])
+
+    next_start = membership.end_date + timedelta(days=1)
+
+    for future in future_queue:
+        future.start_date = next_start
+        future.end_date = next_start + timedelta(days=future.plan.duration_days - 1)
+        future.save(update_fields=["start_date", "end_date", "renovation_date"])
+        next_start = future.end_date + timedelta(days=1)    
 
     from core.utils.hikvision import sync_hikvision_async
     sync_hikvision_async(membership)

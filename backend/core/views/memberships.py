@@ -6,7 +6,7 @@ from django.utils import timezone
 from core.models import Membership, ClientGym, Gym, Company
 from core.serializers.membership import MembershipSerializer, MembershipHistorySerializer
 from core.services.memberships import create_membership_service, MembershipError, cancel_membership_service
-from core.services.payments import register_payment
+from core.services.payments import register_payment, PaymentError
 from .base import CompanyGymScopedViewSet
 from core.services.memberships import activate_membership_now
 from core.services.memberships import (
@@ -34,7 +34,7 @@ class MembershipViewSet(CompanyGymScopedViewSet):
             queryset = queryset.filter(financial_status__in=f_status.split(','))
 
         if o_status:
-            queryset = queryset.filter(operational_status=o_status)
+            queryset = queryset.filter(operational_status__in=o_status.split(','))        
 
         return queryset.select_related('client', 'plan').order_by('-created_at')
     
@@ -57,7 +57,7 @@ class MembershipViewSet(CompanyGymScopedViewSet):
             
         queryset = self.get_queryset().filter(
             client_id=client_id, 
-            financial_status__in=['pending', 'partial']
+            financial_status__in=['PENDING', 'PARTIAL']            
         )
         serializer = MembershipSerializer(queryset, many=True)
         return Response(serializer.data)
@@ -72,18 +72,15 @@ class MembershipViewSet(CompanyGymScopedViewSet):
         data = serializer.validated_data
         client = data["client"]
 
-        # STAFF: crédito / override requiere PIN
+        # STAFF: venta a crédito requiere PIN
         if user.role == user.Roles.STAFF:
             sale_type = request.data.get("sale_type", "CASH")
-            override = request.data.get("payment_grace_days_override")
 
-            needs_pin = (sale_type == "CREDIT") or (override not in [None, "", "null"])
-
-            if needs_pin:
+            if sale_type == "CREDIT":
                 from django.conf import settings
                 pin = request.data.get("pin")
                 if not pin or str(pin) != str(getattr(settings, "CANCEL_PIN", "")):
-                    raise ValidationError({"pin": "PIN requerido o incorrecto para venta a crédito / plazo especial."})
+                    raise ValidationError({"pin": "PIN requerido o incorrecto para venta a crédito."})        
 
         if not client.is_active:
             raise ValidationError({"client": "Cliente inactivo. Debe reactivarse antes de vender una membresía."})
@@ -141,6 +138,15 @@ class MembershipViewSet(CompanyGymScopedViewSet):
 
         # 3) Dejar que el servicio haga su magia
         try:
+            sale_type = data.get("sale_type", "CASH")
+            paid_amount = data.get("paid_amount", 0) or 0
+
+            if sale_type == "CASH" and not data.get("payment_method_id"):
+                raise ValidationError({"payment_method_id": "Debe seleccionar método de pago para una venta CASH."})
+
+            if paid_amount > 0 and not data.get("payment_method_id"):
+                raise ValidationError({"payment_method_id": "Debe seleccionar método de pago cuando exista abono inicial."})            
+            
             membership = create_membership_service(
                 gym=gym,
                 client=client,
@@ -152,8 +158,9 @@ class MembershipViewSet(CompanyGymScopedViewSet):
                 payment_method_id=data.get("payment_method_id"),
                 notes=data.get("notes", ""),
                 force_operational_status=data.get("operational_status"),
-                sale_type=data.get("sale_type", "CASH"),
-                payment_grace_days_override=data.get("payment_grace_days_override"),
+                sale_type=sale_type,
+                payment_due_date=data.get("payment_due_date"),
+                credit_days=data.get("credit_days"),
             )
 
             response_serializer = self.get_serializer(membership)
@@ -174,15 +181,14 @@ class MembershipViewSet(CompanyGymScopedViewSet):
                 amount=request.data.get('amount'),
                 payment_method_id=request.data.get('payment_method_id'),
                 notes=request.data.get('notes', ""),
-                set_due_days=request.data.get('set_due_days'),
                 created_by=request.user if request.user.is_authenticated else None
             )
             
             serializer = self.get_serializer(updated_membership)
             return Response(serializer.data)
             
-        except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except PaymentError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)        
 
 
     #CANCELAR MEMBRESIA    
@@ -261,20 +267,4 @@ class MembershipViewSet(CompanyGymScopedViewSet):
             raise ValidationError({"detail": str(e)})
         
 
-
-    @action(detail=True, methods=["post"], url_path="freeze")
-    def freeze(self, request, pk=None):
-        membership = self.get_object()
-        pin = request.data.get("pin")
-
-        try:
-            updated = freeze_membership_service(
-                membership=membership,
-                requested_by=request.user,
-                pin=pin
-            )
-            serializer = self.get_serializer(updated)
-            return Response(serializer.data)
-        except MembershipError as e:
-            raise ValidationError({"detail": str(e)})
         

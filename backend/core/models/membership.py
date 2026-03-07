@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from decimal import Decimal, ROUND_HALF_UP
+from datetime import timedelta
 
 class Membership(models.Model):
 
@@ -21,9 +22,9 @@ class Membership(models.Model):
     ]
 
     FINANCIAL_STATUS_CHOICES = [
-        ('Deuda', 'Deuda'),
-        ('Parcial', 'Parcial'),
-        ('Pagado', 'Pagado'),
+        ('PENDING', 'Pendiente'),
+        ('PARTIAL', 'Parcial'),
+        ('PAID', 'Pagado'),
     ]
 
     SALE_TYPE_CHOICES = [
@@ -35,12 +36,6 @@ class Membership(models.Model):
         max_length=10,
         choices=SALE_TYPE_CHOICES,
         default="CASH"
-    )
-
-    payment_grace_days_override = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Override de días de gracia para esta membresía. Si es null, usa el valor del gym."
     )
 
     action = models.CharField(
@@ -96,7 +91,7 @@ class Membership(models.Model):
     financial_status = models.CharField(
         max_length=20,
         choices=FINANCIAL_STATUS_CHOICES,
-        default='Deuda'
+        default='PENDING'
     )
 
     # ----------------------
@@ -172,14 +167,30 @@ class Membership(models.Model):
         if self.plan and self.gym and self.plan.gym_id != self.gym_id:
             raise ValidationError("El plan no pertenece a este gimnasio.")
 
-        # 3️⃣ ACTIVE requiere fechas
+        # 3️⃣ Reglas de venta
+        if self.sale_type == "CASH" and self.payment_due_date:
+            raise ValidationError(
+                "Una membresía CASH no puede tener fecha límite de pago."
+            )
+
+        if (
+            self.sale_type == "CREDIT"
+            and self.balance > 0
+            and self.operational_status not in ["CANCELLED", "INACTIVE"]
+            and not self.payment_due_date
+        ):
+            raise ValidationError(
+                "Una membresía CREDIT con saldo pendiente debe tener fecha límite de pago."
+            )        
+
+        # 4 ACTIVE requiere fechas
         if self.operational_status == "ACTIVE":
             if not self.start_date or not self.end_date:
                 raise ValidationError(
                     "Una membresía ACTIVA debe tener fecha de inicio y fin."
                 )
 
-        # 4️⃣ Fin no puede ser menor a inicio
+        # 5 Fin no puede ser menor a inicio
         if self.start_date and self.end_date:
             if self.end_date < self.start_date:
                 raise ValidationError(
@@ -226,13 +237,17 @@ class Membership(models.Model):
         self.balance = (raw_balance if raw_balance > 0 else Decimal("0.00")).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
 
         if self.balance == 0:
-            self.financial_status = 'Pagado'
+            self.financial_status = 'PAID'
         elif self.balance < self.total_amount:
-            self.financial_status = 'Parcial'
+            self.financial_status = 'PARTIAL'
         else:
-            self.financial_status = 'Deuda'
+            self.financial_status = 'PENDING'
 
         # ✅ AHORA validamos con todos los valores ya calculados
+        if self.end_date:
+            self.renovation_date = self.end_date + timedelta(days=1)
+        else:
+            self.renovation_date = None
         self.full_clean()
 
         super().save(*args, **kwargs)

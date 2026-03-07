@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from core.models import Payment, Membership, PaymentMethod
 from core.serializers import PaymentSerializer
-from core.services.payments import register_payment, void_payment
+from core.services.payments import register_payment, void_payment, PaymentError
 from .base import CompanyGymScopedViewSet
 
 
@@ -107,13 +107,6 @@ class PaymentViewSet(CompanyGymScopedViewSet):
                 )
 
         try:
-            import inspect
-            real_fn = inspect.unwrap(void_payment)
-            print("VOID_PAYMENT_MODULE:", void_payment.__module__)
-            print("VOID_PAYMENT_REAL_FROM:", inspect.getsourcefile(real_fn))
-            print("VOID_PAYMENT_REAL_NAME:", real_fn.__name__)
-
-            
             void_payment(payment_id=payment.id, reason=razon, user=user)
             return Response(
                 {"detail": "Pago anulado y saldo restaurado."},

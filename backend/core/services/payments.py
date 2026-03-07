@@ -1,7 +1,4 @@
-from typing import Optional
-
 from decimal import Decimal
-from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 from core.models import Membership, Payment, PaymentMethod
@@ -23,11 +20,14 @@ def register_payment(*, membership_id, amount, payment_method_id, notes="", crea
     except Membership.DoesNotExist:
         raise PaymentError("Membresía no encontrada.")
 
+    if membership.operational_status in ["CANCELLED", "INACTIVE"]:
+        raise PaymentError("No se pueden registrar pagos sobre una membresía cancelada o inactiva.")
+
     # ✅ Balance actual (de DB)
     balance_before = Decimal(str(membership.balance or 0))
 
     if balance_before <= 0:
-        raise PaymentError("Esta membresía ya está cancelada (Pagado).")
+        raise PaymentError("Esta membresía ya no tiene saldo pendiente.")
 
     if amount > balance_before:
         raise PaymentError(f"El monto excede el saldo pendiente (${balance_before}).")
@@ -40,6 +40,15 @@ def register_payment(*, membership_id, amount, payment_method_id, notes="", crea
 
     if pm.gym_id != membership.gym_id:
         raise PaymentError("El método de pago no pertenece a este gimnasio.")
+
+    if membership.sale_type == "CASH":
+        has_previous_paid_payments = Payment.objects.filter(
+            membership_id=membership.id,
+            status="PAID"
+        ).exists()
+
+        if has_previous_paid_payments:
+            raise PaymentError("Una membresía CASH no debe recibir pagos posteriores.")    
 
     # 1) Crear pago (snapshot BEFORE)
     payment = Payment.objects.create(
@@ -71,37 +80,26 @@ def register_payment(*, membership_id, amount, payment_method_id, notes="", crea
     return payment, membership
 
 
-
 def recalc_membership_finance(membership: Membership) -> Membership:
-    total_pagado = (
+    total_paid = (
         Payment.objects.filter(membership_id=membership.id, status="PAID")
         .aggregate(s=Sum("amount"))["s"]
         or Decimal("0.00")
     )
 
-    membership.paid_amount = total_pagado
+    membership.paid_amount = total_paid
+    membership.save()
 
-    provisional_balance = max(
-        Decimal("0.00"),
-        Decimal(str(membership.total_amount)) - total_pagado
-    )
-
-    if provisional_balance > 0:
-        grace_days = membership.payment_grace_days_override or membership.gym.default_payment_grace_days
-
-        base_date = (
-            membership.start_date
-            if membership.operational_status == "SCHEDULED" and membership.start_date
-            else timezone.localdate()
+    if membership.sale_type == "CASH" and membership.balance > 0:
+        raise PaymentError(
+            "Inconsistencia de dominio: una membresía CASH no puede mantener saldo pendiente."
         )
 
-        membership.payment_due_date = base_date + timedelta(days=grace_days)
-    else:
+    if membership.balance == 0:
         membership.payment_due_date = None
+        membership.save(update_fields=["payment_due_date"])
 
-    membership.save()  # recalcula balance + financial_status internamente
     return membership
-
 
 
 @transaction.atomic
