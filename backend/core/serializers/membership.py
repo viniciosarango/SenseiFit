@@ -16,7 +16,7 @@ class MembershipSerializer(serializers.ModelSerializer):
     paid_amount = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
-        write_only=True,
+        #write_only=True,
         required=False,
         default=0
     )

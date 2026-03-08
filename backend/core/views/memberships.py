@@ -242,10 +242,15 @@ class MembershipViewSet(CompanyGymScopedViewSet):
     def freeze(self, request, pk=None):
         membership = self.get_object()
 
+        pin = request.data.get("pin")
+        if not pin:
+            raise ValidationError({"detail": "Debe ingresar PIN."})
+
         try:
             updated = freeze_membership_service(
                 membership=membership,
-                requested_by=request.user
+                requested_by=request.user,
+                pin=pin
             )
 
             serializer = self.get_serializer(updated)
@@ -308,3 +313,39 @@ class MembershipViewSet(CompanyGymScopedViewSet):
         except MembershipError as e:
             raise ValidationError({"detail": str(e)})
         
+
+    @action(detail=True, methods=["post"], url_path="edit-scheduled")
+    def edit_scheduled(self, request, pk=None):
+        membership = self.get_object()
+
+        if membership.operational_status != "SCHEDULED":
+            raise ValidationError({"detail": "Solo se pueden editar membresías programadas."})
+
+        pin = request.data.get("pin")
+        if not pin:
+            raise ValidationError({"detail": "Debe ingresar PIN."})
+
+        from django.conf import settings
+        if str(pin) != str(getattr(settings, "CANCEL_PIN", "")):
+            raise ValidationError({"detail": "PIN incorrecto."})
+
+        new_start_date = request.data.get("start_date")
+        notes = request.data.get("notes", membership.notes or "")
+
+        if not new_start_date:
+            raise ValidationError({"start_date": "Debe indicar una nueva fecha de inicio."})
+
+        from datetime import datetime, timedelta
+
+        try:
+            parsed_start = datetime.strptime(new_start_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValidationError({"start_date": "Formato inválido. Use YYYY-MM-DD."})
+
+        membership.start_date = parsed_start
+        membership.end_date = parsed_start + timedelta(days=membership.plan.duration_days - 1)
+        membership.notes = notes
+        membership.save()
+
+        serializer = self.get_serializer(membership)
+        return Response(serializer.data, status=status.HTTP_200_OK)

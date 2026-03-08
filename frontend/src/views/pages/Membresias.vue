@@ -1,16 +1,29 @@
 <script setup>
 import { FilterMatchMode } from '@primevue/core/api'; // 🎯 Ruta correcta para v4
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { MembershipService } from '@/service/MembershipService';
 import { useToast } from 'primevue/usetoast';
 import { useRouter } from 'vue-router';
 import { onBeforeUnmount } from 'vue'
 import { bus, EVENTS } from '@/events/bus'
+import { PlanService } from '@/service/PlanService';
+import { PaymentMethodService } from '@/service/PaymentMethodService';
+import Menu from 'primevue/menu'
+
 const router = useRouter();
 
 // Estado y Datos
 const memberships = ref([]);
 const loading = ref(false);
+
+const rowMenuRef = ref();
+const rowTarget = ref(null);
+
+const toggleRowMenu = (event, membership) => {
+    rowTarget.value = membership;
+    rowMenuRef.value.toggle(event);
+};
+
 
 const detailDialog = ref(false);
 const selectedMembership = ref(null);
@@ -24,6 +37,184 @@ const cancelData = ref({ id: null, pin: '', reason: '' });
 const irAPagar = (membershipId) => {
   router.push({ path: '/pagos', query: { membership_id: membershipId } })
 }
+
+const editDialog = ref(false);
+const editForm = ref({
+    id: null,
+    start_date: null,
+    notes: '',
+    pin: ''
+});
+
+const upgradeDialog = ref(false);
+const upgradeTarget = ref(null);
+const upgradeForm = ref({
+    plan_id: null,
+    payment_method_id: null,
+    paid_amount: 0,
+    sale_type: 'CREDIT',
+    notes: ''
+});
+
+
+const executeEditScheduled = async () => {
+    try {
+        const start = editForm.value.start_date;
+        const year = start.getFullYear();
+        const month = String(start.getMonth() + 1).padStart(2, '0');
+        const day = String(start.getDate()).padStart(2, '0');
+
+        const payload = {
+            start_date: `${year}-${month}-${day}`,
+            notes: editForm.value.notes,
+            pin: editForm.value.pin
+        };
+
+        await MembershipService.editScheduledMembership(editForm.value.id, payload);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Actualizada',
+            detail: 'Programación actualizada correctamente',
+            life: 3000
+        });
+
+        editDialog.value = false;
+        loadMemberships();
+
+    } catch (error) {
+        const errorMsg = error.response?.data?.detail || 'Error al actualizar programación';
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMsg,
+            life: 4000
+        });
+    }
+};
+
+
+const rowMenuItems = computed(() => {
+    if (!rowTarget.value) return [];
+
+    const m = rowTarget.value;
+    const items = [];
+
+    if (m.operational_status === 'SCHEDULED') {
+        items.push({
+            label: 'Editar programación',
+            icon: 'pi pi-pencil',
+            command: () => editMembership(m)
+        });
+    }
+
+    if (m.operational_status === 'SCHEDULED') {
+        items.push({
+            label: 'Activar ahora',
+            icon: 'pi pi-play',
+            command: () => activateMembership(m)
+        });
+    }
+
+    if (m.operational_status === 'ACTIVE') {
+        items.push({
+            label: 'Congelar',
+            icon: 'pi pi-pause',
+            command: () => openFreezeDialog(m)
+        });
+    }
+
+    if (m.operational_status === 'FROZEN') {
+        items.push({
+            label: 'Descongelar',
+            icon: 'pi pi-play',
+            command: () => openUnfreezeDialog(m)
+        });
+    }
+
+    if (m.operational_status === 'ACTIVE') {
+        items.push({
+            label: 'Upgrade',
+            icon: 'pi pi-arrow-up-right',
+            command: () => openUpgradeDialog(m)
+        });
+    }
+
+    if (['ACTIVE', 'SCHEDULED'].includes(m.operational_status)) {
+        items.push({
+            label: 'Cancelar membresía',
+            icon: 'pi pi-times-circle',
+            command: () => openCancelDialog(m)
+        });
+    }
+
+    return items;
+});
+
+
+const openUpgradeDialog = async (membership) => {
+    upgradeTarget.value = membership;
+
+    try {
+        const [allPlans, methods] = await Promise.all([
+            PlanService.getPlans({ gym: membership.gym }),
+            PaymentMethodService.getPaymentMethods({ gym: membership.gym })
+        ]);
+
+        upgradePlans.value = allPlans.filter(
+            p => p.plan_type === membership.plan_type && p.id !== membership.plan
+        );
+
+        paymentMethods.value = methods;
+    } catch (error) {
+        upgradePlans.value = [];
+        paymentMethods.value = [];
+        console.error('Error cargando datos para upgrade:', error);
+    }
+
+    upgradeForm.value = {
+        plan_id: null,
+        payment_method_id: null,
+        paid_amount: 0,
+        sale_type: 'CREDIT',
+        notes: `Upgrade desde ${membership.plan_name}`
+    };
+
+    upgradeDialog.value = true;
+};
+
+const executeUpgrade = async () => {
+    try {
+        const updated = await MembershipService.upgradeMembership(
+            upgradeTarget.value.id,
+            upgradeForm.value
+        );
+
+        toast.add({
+            severity: 'success',
+            summary: 'Upgrade realizado',
+            detail: `Nueva membresía creada: ${updated.plan_name}`,
+            life: 3000
+        });
+
+        upgradeDialog.value = false;
+        loadMemberships();
+
+    } catch (error) {
+        const errorMsg = error.response?.data?.detail || 'Error al procesar upgrade';
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMsg,
+            life: 4000
+        });
+    }
+};
+
+const paymentMethods = ref([]);
+const upgradePlans = ref([]);
+
+const membershipStatus = ref('ACTIVE');
 
 
 const openCancelDialog = (data) => {
@@ -121,8 +312,18 @@ const viewMembership = (data) => {
     detailDialog.value = true;
 };
 
+
+const editMembership = (data) => {
+    editForm.value = {
+        id: data.id,
+        start_date: data.start_date ? new Date(data.start_date) : null,
+        notes: data.notes || '',
+        pin: ''
+    };
+    editDialog.value = true;
+};
+
 // Funciones placeholder para el futuro (paso a paso)
-const editMembership = (data) => console.log("Editar:", data.id);
 const confirmDelete = (data) => console.log("Eliminar:", data.id);
 
 
@@ -131,10 +332,17 @@ const filters = ref({
     global: { value: null, matchMode: FilterMatchMode.CONTAINS }
 });
 
+
 const loadMemberships = async () => {
     loading.value = true;
     try {
-        memberships.value = await MembershipService.getAllMemberships();
+        const params = {};
+
+        if (membershipStatus.value !== 'ALL') {
+            params.operational_status = membershipStatus.value;
+        }
+
+        memberships.value = await MembershipService.getAllMemberships(params);
     } catch (error) {
         console.error("Error al cargar membresías:", error);
     } finally {
@@ -275,6 +483,17 @@ const activateMembership = async (membership) => {
 
 <template>
     <div class="card">
+
+        <div class="w-full flex justify-end gap-2 mb-3">
+            <Button label="Activas" :outlined="membershipStatus !== 'ACTIVE'" @click="membershipStatus='ACTIVE'; loadMemberships()" />
+            <Button label="Programadas" :outlined="membershipStatus !== 'SCHEDULED'" @click="membershipStatus='SCHEDULED'; loadMemberships()" />
+            <Button label="Congeladas" :outlined="membershipStatus !== 'FROZEN'" @click="membershipStatus='FROZEN'; loadMemberships()" />
+            <Button label="Canceladas" :outlined="membershipStatus !== 'CANCELLED'" @click="membershipStatus='CANCELLED'; loadMemberships()" />
+            <Button label="Vencidas" :outlined="membershipStatus !== 'EXPIRED'" @click="membershipStatus='EXPIRED'; loadMemberships()" />
+            <Button label="Todas" :outlined="membershipStatus !== 'ALL'" @click="membershipStatus='ALL'; loadMemberships()" />
+        </div>
+
+
         <DataTable 
             :value="memberships" 
             v-model:filters="filters"
@@ -366,66 +585,36 @@ const activateMembership = async (membership) => {
                 </template>
             </Column>
 
-            <Column header="Cobrar" style="width: 5rem">
-                <template #body="slotProps">
-                    <Button 
-                        v-if="slotProps.data.balance > 0"
-                        icon="pi pi-dollar" 
-                        severity="success" 
-                        rounded 
-                        
-                        @click="irAPagar(slotProps.data.id)" 
-
-                        title="Registrar Pago"
-                    />
-                </template>
-            </Column>
-
             <Column header="Acciones" style="min-width:10rem">
                 <template #body="slotProps">
-                    <Button icon="pi pi-eye" outlined rounded class="mr-2" @click="viewMembership(slotProps.data)" />
-
-                    <Button 
-                        v-if="slotProps.data.operational_status === 'SCHEDULED'"
-                        icon="pi pi-play"
-                        outlined
-                        rounded
-                        severity="info"
-                        class="mr-2"
-                        @click="activateMembership(slotProps.data)"
-                    />
-
-                    <template v-if="isSuperuser">
-
-                        <!-- Congelar -->
-                        <Button 
-                            v-if="slotProps.data.operational_status === 'ACTIVE'"
-                            icon="pi pi-pause"
+                    <div class="flex align-items-center gap-2">
+                        <Button
+                            icon="pi pi-eye"
                             outlined
                             rounded
-                            severity="warning"
-                            class="mr-2"
-                            @click="openFreezeDialog(slotProps.data)"
-                            title="Congelar"
+                            @click="viewMembership(slotProps.data)"
+                            title="Ver detalle"
                         />
 
-                        <!-- Descongelar -->
-                        <Button 
-                            v-if="slotProps.data.operational_status === 'FROZEN'"
-                            icon="pi pi-play"
-                            outlined
-                            rounded
+                        <Button
+                            v-if="slotProps.data.balance > 0"
+                            icon="pi pi-dollar"
                             severity="success"
-                            class="mr-2"
-                            @click="openUnfreezeDialog(slotProps.data)"
-                            title="Reactivar"
+                            rounded
+                            @click="irAPagar(slotProps.data.id)"
+                            title="Registrar pago"
                         />
 
-                        <Button icon="pi pi-pencil" outlined rounded severity="success" class="mr-2" @click="editMembership(slotProps.data)" />
-                        <Button icon="pi pi-trash" outlined rounded severity="danger" @click="openCancelDialog(slotProps.data)" />
-                    </template>
+                        <Button
+                            icon="pi pi-ellipsis-v"
+                            text
+                            rounded
+                            @click="(e) => toggleRowMenu(e, slotProps.data)"
+                            title="Más acciones"
+                        />
 
-
+                        <Menu :model="rowMenuItems" popup ref="rowMenuRef" />
+                    </div>
                 </template>
             </Column>
 
@@ -433,39 +622,109 @@ const activateMembership = async (membership) => {
 
         </DataTable>
 
-        <Dialog v-model:visible="detailDialog" modal header="Ficha Técnica de Membresía" :style="{ width: '50vw' }" class="p-fluid">
+        <Dialog v-model:visible="detailDialog" modal header="Ficha Técnica de Membresía" :style="{ width: '60vw', maxWidth: '900px' }" class="p-fluid">
+            
             <div v-if="selectedMembership" class="grid">
-                <div class="col-12 md:col-6">
+                <div class="col-12 md:col-8">
                     <label class="font-bold block mb-2">Socio</label>
                     <div class="text-lg">{{ selectedMembership.client_name }}</div>
                     <small class="text-500">ID: {{ selectedMembership.client_id_number }}</small>
                 </div>
-                <div class="col-12 md:col-6 text-right">
-                    <Tag :value="selectedMembership.operational_status" :severity="getStatusSeverity(selectedMembership.operational_status)" />
+
+                <div class="col-12 md:col-4 text-right">
+                    <Tag
+                        :value="selectedMembership.operational_status"
+                        :severity="getStatusSeverity(selectedMembership.operational_status)"
+                    />
                 </div>
 
                 <Divider />
 
                 <div class="col-12 md:col-6">
-                    <label class="font-bold block mb-1">Plan Contratado</label>
-                    <p>{{ selectedMembership.plan_name }} ({{ selectedMembership.plan_type }})</p>
+                    <label class="font-bold block mb-1">Plan contratado</label>
+                    <p class="m-0">{{ selectedMembership.plan_name }}</p>
+                    <small class="text-500">Tipo: {{ selectedMembership.plan_type }}</small>
                 </div>
+
                 <div class="col-12 md:col-6">
-                    <label class="font-bold block mb-1">Fecha de Venta</label>
-                    <p>{{ formatDate(selectedMembership.created_at) }}</p>
+                    <label class="font-bold block mb-1">Fecha de venta</label>
+                    <p class="m-0">{{ formatDate(selectedMembership.created_at) }}</p>
                 </div>
 
                 <div class="col-12 md:col-4">
-                    <label class="font-bold block mb-1">Total a Pagar</label>
-                    <p class="text-xl">${{ selectedMembership.total_amount }}</p>
+                    <label class="font-bold block mb-1">Inicio</label>
+                    <p class="m-0">{{ formatDateOnly(selectedMembership.start_date) }}</p>
                 </div>
+
                 <div class="col-12 md:col-4">
-                    <label class="font-bold block mb-1 text-red-500">Saldo Pendiente</label>
-                    <p class="text-xl font-bold text-red-500">${{ selectedMembership.balance }}</p>
+                    <label class="font-bold block mb-1">Fin</label>
+                    <p class="m-0">{{ formatDateOnly(selectedMembership.end_date) }}</p>
                 </div>
+
                 <div class="col-12 md:col-4">
-                    <label class="font-bold block mb-1 text-green-500">Estado Financiero</label>
-                    <Tag :value="selectedMembership.financial_status" :severity="getFinancialSeverity(selectedMembership.financial_status)" />
+                    <label class="font-bold block mb-1">Renovación</label>
+                    <p class="m-0">{{ formatDateOnly(selectedMembership.renovation_date) }}</p>
+                </div>
+
+                <Divider />
+
+                <div class="col-12 md:col-4">
+                    <label class="font-bold block mb-1">Total</label>
+                    <p class="text-xl m-0">${{ selectedMembership.total_amount }}</p>
+                </div>
+
+                <div class="col-12 md:col-4">
+                    <label class="font-bold block mb-1">Pagado</label>
+                    <p class="text-xl m-0 text-green-500">${{ selectedMembership.paid_amount }}</p>
+                </div>
+
+                <div class="col-12 md:col-4">
+                    <label class="font-bold block mb-1">Saldo</label>
+                    <p class="text-xl m-0" :class="selectedMembership.balance > 0 ? 'text-red-500 font-bold' : 'text-green-500'">
+                        ${{ selectedMembership.balance }}
+                    </p>
+                </div>
+
+                <div class="col-12 md:col-4">
+                    <label class="font-bold block mb-1">Estado financiero</label>
+                    <Tag
+                        :value="selectedMembership.financial_status"
+                        :severity="getFinancialSeverity(selectedMembership.financial_status)"
+                    />
+                </div>
+
+                <div class="col-12 md:col-4">
+                    <label class="font-bold block mb-1">Tipo de venta</label>
+                    <p class="m-0">{{ selectedMembership.sale_type }}</p>
+                </div>
+
+                <div class="col-12 md:col-4">
+                    <label class="font-bold block mb-1">Fecha límite pago</label>
+                    <p class="m-0">{{ formatDateOnly(selectedMembership.payment_due_date) || '—' }}</p>
+                </div>
+
+                <Divider />
+
+                <div class="col-12 md:col-4">
+                    <label class="font-bold block mb-1">Días congelados</label>
+                    <p class="m-0">{{ selectedMembership.freeze_days_current || 0 }}</p>
+                </div>
+
+                <div class="col-12 md:col-4" v-if="selectedMembership.plan_type === 'SESSIONS'">
+                    <label class="font-bold block mb-1">Sesiones</label>
+                    <p class="m-0">
+                        {{ selectedMembership.sessions_remaining }} / {{ selectedMembership.sessions_total }}
+                    </p>
+                </div>
+
+                <div class="col-12 md:col-4" v-if="selectedMembership.discount_percent_applied > 0">
+                    <label class="font-bold block mb-1">Descuento</label>
+                    <p class="m-0">{{ selectedMembership.discount_percent_applied }}%</p>
+                </div>
+
+                <div class="col-12 md:col-4" v-if="selectedMembership.enrollment_fee_applied > 0">
+                    <label class="font-bold block mb-1">Inscripción</label>
+                    <p class="m-0">${{ selectedMembership.enrollment_fee_applied }}</p>
                 </div>
 
                 <div class="col-12 mt-3" v-if="selectedMembership.notes">
@@ -473,6 +732,7 @@ const activateMembership = async (membership) => {
                     <div class="p-3 surface-100 border-round italic">{{ selectedMembership.notes }}</div>
                 </div>
             </div>
+
         </Dialog>
 
         <Dialog v-model:visible="cancelDialog" modal header="Autorización Requerida" :style="{ width: '350px' }">
@@ -538,6 +798,119 @@ const activateMembership = async (membership) => {
                 <Button label="Confirmar" severity="success" @click="executeUnfreeze" />
             </template>
         </Dialog>
+
+        <Dialog
+            v-model:visible="upgradeDialog"
+            modal
+            header="Upgrade de Membresía"
+            :style="{ width: '95vw', maxWidth: '520px' }"
+        >
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div
+                    v-if="upgradeTarget"
+                    style="padding: 1rem; border-radius: 12px; background: rgba(16, 185, 129, 0.12);"
+                >
+                    <div style="font-size: 0.85rem; opacity: 0.8;">Membresía actual</div>
+                    <div style="font-weight: 700; font-size: 1.1rem;">{{ upgradeTarget.plan_name }}</div>
+                    <div style="font-size: 0.9rem;">Tipo: {{ upgradeTarget.plan_type }}</div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                    <label style="font-weight: 700;">Plan destino</label>
+                    <Select
+                        v-model="upgradeForm.plan_id"
+                        :options="upgradePlans"
+                        optionLabel="name"
+                        optionValue="id"
+                        placeholder="Seleccione plan"
+                        class="w-full"
+                    />
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                    <label style="font-weight: 700;">Método de pago</label>
+                    <Select
+                        v-model="upgradeForm.payment_method_id"
+                        :options="paymentMethods"
+                        optionLabel="name"
+                        optionValue="id"
+                        placeholder="Seleccione método"
+                        class="w-full"
+                    />
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                    <label style="font-weight: 700;">Tipo de venta</label>
+                    <Select
+                        v-model="upgradeForm.sale_type"
+                        :options="[
+                            { label: 'Crédito', value: 'CREDIT' },
+                            { label: 'Contado', value: 'CASH' }
+                        ]"
+                        optionLabel="label"
+                        optionValue="value"
+                        placeholder="Seleccione tipo"
+                        class="w-full"
+                    />
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                    <label style="font-weight: 700;">Abono inicial</label>
+                    <InputNumber
+                        v-model="upgradeForm.paid_amount"
+                        mode="currency"
+                        currency="USD"
+                        locale="en-US"
+                        :min="0"
+                        class="w-full"
+                    />
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                    <label style="font-weight: 700;">Notas</label>
+                    <Textarea
+                        v-model="upgradeForm.notes"
+                        rows="3"
+                        class="w-full"
+                    />
+                </div>
+            </div>
+
+            <template #footer>
+                <div style="display: flex; justify-content: flex-end; gap: 0.75rem; width: 100%;">
+                    <Button label="Cancelar" text @click="upgradeDialog = false" />
+                    <Button label="Procesar Upgrade" severity="help" @click="executeUpgrade" />
+                </div>
+            </template>
+        </Dialog>
+
+
+        <Dialog v-model:visible="editDialog" modal header="Editar programación" :style="{ width: '95vw', maxWidth: '420px' }">
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                    <label style="font-weight: 700;">Nueva fecha de inicio</label>
+                    <DatePicker v-model="editForm.start_date" dateFormat="dd/mm/yy" showIcon />
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                    <label style="font-weight: 700;">Notas</label>
+                    <Textarea v-model="editForm.notes" rows="3" />
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                    <label style="font-weight: 700;">PIN</label>
+                    <InputText v-model="editForm.pin" type="password" placeholder="Ingrese PIN" />
+                </div>
+            </div>
+
+            <template #footer>
+                <div style="display: flex; justify-content: flex-end; gap: 0.75rem; width: 100%;">
+                    <Button label="Cancelar" text @click="editDialog = false" />
+                    <Button label="Guardar cambios" severity="success" @click="executeEditScheduled" />
+                </div>
+            </template>
+        </Dialog>
+
 
 
         <Toast />
