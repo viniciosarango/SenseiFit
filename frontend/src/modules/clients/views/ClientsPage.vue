@@ -125,6 +125,7 @@ async function loadPaymentMethods(gymId = null) {
 
 const toast = useToast();
 const clients = ref([]);
+const client = ref({});
 const clientStatus = ref('active') // active | inactive | all
 
 watch(clientStatus, () => loadClients())
@@ -139,13 +140,28 @@ const selectedClient = ref(null)
 
 const deleteClientDialog = ref(false);
 const membershipDialog = ref(false);
-const membership = ref({});
 
-watch(() => membership.value.gym_id, async (newGym) => {
-    if (newGym) {
-        await loadPlans(newGym)
-        await loadPaymentMethods(newGym)
+const membership = ref({
+    sale_type: 'CASH',
+    credit_mode: 'DAYS'
+});
+
+watch(() => membership.value.gym_id, async (newGym, oldGym) => {
+    if (!newGym) {
+        plans.value = []
+        paymentMethods.value = []
+        membership.value.plan_id = null
+        membership.value.payment_method_id = null
+        return
     }
+
+    if (oldGym && newGym !== oldGym) {
+        membership.value.plan_id = null
+        membership.value.payment_method_id = null
+    }
+
+    await loadPlans(newGym)
+    await loadPaymentMethods(newGym)
 })
 
 const selectedPlanData = computed(() => {
@@ -180,15 +196,18 @@ const endDatePreview = computed(() => {
 
 // 🎯 Calculadora de Vuelto (Solo visual para la secretaria)
 const changeAmount = computed(() => {
+    if (membership.value.sale_type !== 'CASH') return 0;
+
     const recibido = parseFloat(membership.value.paid_amount || 0);
     const total = totalToPay.value;
-    // Solo mostramos vuelto si el dinero entregado supera el total
+
     return recibido > total ? recibido - total : 0;
 });
 
 
 function editClient(clientData) {
   selectedClient.value = clientData
+  client.value = { ...clientData }
   clientDialog.value = true
 }
 
@@ -213,40 +232,48 @@ function openNewMembership(clientData) {
     membership.value = {
         client: clientData.id,
         client_name: clientData.full_name,
-        company_id: authStore.user?.company || null,
-        gym_id: authStore.user?.gym || null,
+        company_id: authStore.user?.company || authStore.companyId || null,
+        gym_id: authStore.user?.gym || authStore.gymId || null,
+
         plan_id: null,
-        start_date: new Date(),
+        start_date: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()),
+
+        sale_type: 'CASH',
+        credit_mode: 'DAYS',
+
         paid_amount: 0,
+        payment_method_id: null,
+
+        credit_days: null,
+        payment_due_date: null,
+
         enrollment_fee_applied: 0,
         discount_percent_applied: 0,
-        courtesy_qty: 0,
-        payment_method_id: null,
+
         notes: '',
-        sale_type: 'CASH',
-        payment_grace_days_override: null,
         pin: '',
     };
 
-    // 🔥 Si ya hay gym definido (staff o admin)
     if (membership.value.gym_id) {
+        membership.value.payment_method_id = null
+        membership.value.plan_id = null
         loadPaymentMethods(membership.value.gym_id);
         loadPlans(membership.value.gym_id);
     }
-
+    selectedClient.value = clientData;
     membershipDialog.value = true;
 }
 
-function onPlanChange() {
 
+function onPlanChange() {
     if (!membership.value.plan_id) return
 
-    if (membership.value.plan_id) {
-        if (membership.value.sale_type === 'CASH') {
+    if (membership.value.sale_type === 'CASH') {
         membership.value.paid_amount = totalToPay.value
-        } else {
+    }
+
+    if (membership.value.sale_type === 'CREDIT' && membership.value.paid_amount == null) {
         membership.value.paid_amount = 0
-        }
     }
 }
 
@@ -259,12 +286,15 @@ function loadClients() {
 
 function openNew() {
   selectedClient.value = null
+  client.value = {}
   clientDialog.value = true
 }
 
 function hideDialog() {
     clientDialog.value = false;
     submitted.value = false;
+    client.value = {};
+    selectedClient.value = null;
 }
 
 
@@ -357,38 +387,58 @@ function deleteClient() {
 }
 
 
-
 async function saveMembership() {
-    const totalActual = totalToPay.value;
-    const recibido = parseFloat(membership.value.paid_amount || 0);
-
-    const dataToSend = { ...membership.value };
+    const dataToSend = {
+        client: Number(membership.value.client),
+        plan_id: Number(membership.value.plan_id),
+        sale_type: membership.value.sale_type,
+        paid_amount: Number(membership.value.paid_amount || 0),
+        payment_method_id: membership.value.payment_method_id ? Number(membership.value.payment_method_id) : undefined,
+        discount_percent_applied: Number(membership.value.discount_percent_applied || 0),
+        enrollment_fee_applied: Number(membership.value.enrollment_fee_applied || 0),
+        notes: membership.value.notes || '',
+    };
 
     if (authStore.user?.is_superuser) {
-        dataToSend.company = membership.value.company_id;
-        dataToSend.gym = membership.value.gym_id;
+        dataToSend.company = Number(membership.value.company_id);
+        dataToSend.gym = Number(membership.value.gym_id);
     } 
     else if (authStore.user?.role === 'ADMIN') {
-        dataToSend.gym = membership.value.gym_id;
-    } 
-    else {
-        dataToSend.gym = authStore.user.gym;
+        dataToSend.gym = Number(membership.value.gym_id);
     }
 
-
-
     if (membership.value.start_date) {
-        const d = new Date(membership.value.start_date);
+        const d = membership.value.start_date instanceof Date
+            ? membership.value.start_date
+            : new Date(membership.value.start_date)
+
         const year = d.getFullYear();
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
-        
+
         dataToSend.requested_start_date = `${year}-${month}-${day}`;
-        delete dataToSend.start_date; 
     }
 
-    if (recibido > totalActual) {
-        dataToSend.paid_amount = totalActual;
+    if (membership.value.sale_type === 'CREDIT') {
+        if (membership.value.credit_mode === 'DAYS' && membership.value.credit_days) {
+            dataToSend.credit_days = Number(membership.value.credit_days);
+        }
+
+        if (membership.value.credit_mode === 'DATE' && membership.value.payment_due_date) {
+            const d = membership.value.payment_due_date instanceof Date
+                ? membership.value.payment_due_date
+                : new Date(membership.value.payment_due_date)
+
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+
+            dataToSend.payment_due_date = `${year}-${month}-${day}`;
+        }
+
+        if (authStore.user?.role === 'STAFF') {
+            dataToSend.pin = membership.value.pin || '';
+        }
     }
 
     if (authStore.user?.is_superuser && (!membership.value.company_id || !membership.value.gym_id)) {
@@ -401,30 +451,101 @@ async function saveMembership() {
         return;
     }
 
-    if (!(authStore.user?.role === 'STAFF' && (dataToSend.sale_type === 'CREDIT' || dataToSend.payment_grace_days_override))) {
-        delete dataToSend.pin
+    if (membership.value.sale_type === 'CREDIT' && authStore.user?.role === 'STAFF' && !membership.value.pin) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Atención',
+            detail: 'Debe ingresar PIN para una venta a crédito.',
+            life: 3000
+        });
+        return;
     }
+
+    if (
+        membership.value.sale_type === 'CREDIT' &&
+        membership.value.credit_mode === 'DATE' &&
+        !membership.value.payment_due_date
+    ) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Atención',
+            detail: 'Debe seleccionar la fecha límite de pago.',
+            life: 3000
+        });
+        return;
+    }
+
+    if (membership.value.sale_type === 'CREDIT') {
+        const hasCreditDays = Number(membership.value.credit_days || 0) > 0
+        const hasPaymentDueDate = !!membership.value.payment_due_date
+
+        if (membership.value.credit_mode === 'DAYS') {
+            dataToSend.payment_due_date = undefined
+        }
+
+        if (membership.value.credit_mode === 'DATE') {
+            dataToSend.credit_days = undefined
+        }
+
+        if (membership.value.credit_mode === 'DAYS' && hasPaymentDueDate) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Atención',
+                detail: 'La venta a crédito por días no debe enviar fecha límite.',
+                life: 3000
+            });
+            return;
+        }
+
+        if (membership.value.credit_mode === 'DATE' && hasCreditDays) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Atención',
+                detail: 'La venta a crédito por fecha no debe enviar días de plazo.',
+                life: 3000
+            });
+            return;
+        }
+    }
+    
 
     try {
         await MembershipService.createMembership(dataToSend);
-        toast.add({ severity: 'success', summary: 'Venta Confirmada', detail: 'Membresía activada', life: 3000 });
+        toast.add({ severity: 'success', summary: 'Venta Confirmada', detail: 'Membresía registrada correctamente', life: 3000 });
         membershipDialog.value = false;
+        
+        membership.value = {
+            sale_type: 'CASH',
+            credit_mode: 'DAYS'
+        };
+        selectedClient.value = null;
+        paymentMethods.value = [];
+        plans.value = [];
         loadClients();
+
     } catch (error) {
         console.error("Error al enviar:", error.response?.data);
-        const data = error.response?.data
+        const data = error.response?.data;
         const msg =
-        data?.pin ||
-        data?.client ||
-        data?.detail ||
-        'Fallo al procesar venta'
+            data?.pin ||
+            data?.client ||
+            data?.payment_method_id ||
+            data?.credit_days ||
+            data?.payment_due_date ||
+            data?.sale_type ||
+            data?.paid_amount ||
+            data?.plan_id ||
+            data?.requested_start_date ||
+            data?.non_field_errors?.[0] ||
+            data?.detail ||
+            'Fallo al procesar venta';
 
         toast.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: msg,
-        life: 4000
-        })
+            severity: 'error',
+            summary: 'Error',
+            detail: msg,
+            life: 4000
+        });
     }
 }
 
@@ -453,14 +574,58 @@ function confirmReactivateClient(clientData) {
   })
 }
 
+
+
 function onSaleTypeChange(type) {
   membership.value.sale_type = type
-  if (type === 'CREDIT') {
-    membership.value.paid_amount = 0
-  } else {
-    membership.value.payment_grace_days_override = null
+
+    if (type === 'CASH') {
+        membership.value.credit_mode = 'DAYS'
+        membership.value.credit_days = null
+        membership.value.payment_due_date = null
+        membership.value.pin = ''
+        membership.value.payment_method_id = null
+        membership.value.paid_amount = totalToPay.value
+    }
+
+    if (type === 'CREDIT') {
+        membership.value.payment_method_id = null
+        membership.value.credit_days = null
+        membership.value.payment_due_date = null
+        membership.value.paid_amount = 0
+    }
+}
+
+
+function onCreditModeChange(mode) {
+  membership.value.credit_mode = mode
+
+  if (mode === 'DAYS') {
+    membership.value.payment_due_date = null
+  }
+
+  if (mode === 'DATE') {
+    membership.value.credit_days = null
   }
 }
+
+watch(
+    () => membership.value.paid_amount,
+    (newValue) => {
+        if (membership.value.sale_type === 'CREDIT' && Number(newValue || 0) <= 0) {
+            membership.value.payment_method_id = null
+        }
+    }
+)
+
+watch(
+    totalToPay,
+    (newTotal) => {
+        if (membership.value.sale_type === 'CASH') {
+            membership.value.paid_amount = newTotal
+        }
+    }
+)
 
 
 </script>
@@ -569,10 +734,7 @@ function onSaleTypeChange(type) {
                         <label class="font-bold block mb-1 text-sm">Descuento (%)</label>
                         <InputNumber v-model="membership.discount_percent_applied" suffix="%" :min="0" :max="100" />
                     </div>
-                    <div>
-                        <label class="font-bold block mb-1 text-sm text-blue-600">Pases Cortesía</label>
-                        <InputNumber v-model="membership.courtesy_qty" showButtons :min="0" :max="10" />
-                    </div>
+                    
                     <div>
                         <label class="font-bold block mb-1 text-sm">Fecha Inicio</label>
                         <DatePicker v-model="membership.start_date" dateFormat="dd/mm/yy" showIcon />
@@ -585,73 +747,152 @@ function onSaleTypeChange(type) {
                     </div>
                 </div>
                 
-                <div class="mb-4">
-                    <label class="font-bold block mb-2 text-xs uppercase text-gray-500">Forma de Pago</label>
-                    <Select 
-                        v-model="membership.payment_method_id" 
-                        :options="paymentMethods" 
-                        optionLabel="name" 
-                        optionValue="id" 
-                        placeholder="Seleccione método" 
-                        class="w-full shadow-sm"
-                    />
-                </div>
-
                 <div class="mb-3">
                     <label class="font-bold block mb-2 text-xs uppercase text-gray-500">Tipo de venta</label>
                     <div class="flex gap-2">
                         <Button
-                        label="Contado"
-                        :outlined="membership.sale_type !== 'CASH'"
-                        @click="onSaleTypeChange('CASH')"
+                            label="Contado"
+                            :outlined="membership.sale_type !== 'CASH'"
+                            @click="onSaleTypeChange('CASH')"
                         />
                         <Button
-                        label="Crédito"
-                        :outlined="membership.sale_type !== 'CREDIT'"
-                        @click="onSaleTypeChange('CREDIT')"
+                            label="Crédito"
+                            :outlined="membership.sale_type !== 'CREDIT'"
+                            @click="onSaleTypeChange('CREDIT')"
                         />
                     </div>
                 </div>
 
-                <div v-if="membership.sale_type === 'CREDIT'" class="mb-3">
-                    <label class="font-bold block mb-2 text-xs uppercase text-gray-500">Días de plazo</label>
-                    <InputNumber
-                        v-model="membership.payment_grace_days_override"
-                        showButtons
-                        :min="1"
-                        :max="365"
-                        placeholder="Ej: 15"
-                        class="w-full"
-                    />
-                    <small class="text-gray-500">Si no ingresas nada, se usa el valor por defecto del gym.</small>
-                </div>
-
-                <div
-                    v-if="authStore.user?.role === 'STAFF' && (membership.sale_type === 'CREDIT' || membership.payment_grace_days_override)"
-                    class="mb-3"
-                    >
-                    <label class="font-bold block mb-2 text-xs uppercase text-gray-500">PIN de autorización</label>
-                    <InputText
-                        v-model="membership.pin"
-                        type="password"
-                        placeholder="Ingrese PIN"
-                        class="w-full"
-                    />
+                <div v-if="membership.sale_type === 'CASH'" class="flex flex-col gap-3">
+                    <div>
+                        <label class="font-bold block mb-2 text-xs uppercase text-gray-500">Forma de pago</label>
+                        <Select 
+                            v-model="membership.payment_method_id" 
+                            :options="paymentMethods.filter(pm => pm.active)" 
+                            optionLabel="name" 
+                            optionValue="id" 
+                            placeholder="Seleccione método" 
+                            class="w-full shadow-sm"
+                        />
                     </div>
 
-                <label class="font-bold block mb-2 text-center text-sm uppercase text-gray-600">Dinero Entregado ($)</label>
-                <InputNumber 
-                    v-model="membership.paid_amount" 
-                    mode="currency" 
-                    currency="USD" 
-                    locale="en-US" 
-                    class="text-3xl" 
-                    inputClass="text-center font-bold" 
-                />
+                    <div>
+                        <label class="font-bold block mb-2 text-center text-sm uppercase text-gray-600">Monto pagado ($)</label>
+                        <InputNumber 
+                            v-model="membership.paid_amount" 
+                            mode="currency" 
+                            currency="USD" 
+                            locale="en-US" 
+                            class="text-3xl" 
+                            inputClass="text-center font-bold" 
+                        />
+                    </div>
+                </div>
+
+                <div v-if="membership.sale_type === 'CREDIT'" class="flex flex-col gap-3">
+                    <div>
+                        <label class="font-bold block mb-2 text-center text-sm uppercase text-gray-600">Abono inicial ($)</label>
+                        <InputNumber 
+                            v-model="membership.paid_amount" 
+                            mode="currency" 
+                            currency="USD" 
+                            locale="en-US" 
+                            class="text-3xl" 
+                            inputClass="text-center font-bold" 
+                        />
+                    </div>
+
+                    <div v-if="Number(membership.paid_amount || 0) > 0">
+                        <label class="font-bold block mb-2 text-xs uppercase text-gray-500">Forma de pago del abono</label>
+                        <Select 
+                            v-model="membership.payment_method_id" 
+                            :options="paymentMethods.filter(pm => pm.active)" 
+                            optionLabel="name" 
+                            optionValue="id" 
+                            placeholder="Seleccione método" 
+                            class="w-full shadow-sm"
+                        />
+                    </div>
+
+                    <div>
+                        <label class="font-bold block mb-2 text-xs uppercase text-gray-500">Definición del crédito</label>
+                        <div class="flex gap-2">
+                            <Button
+                                label="Días"
+                                :outlined="membership.credit_mode !== 'DAYS'"
+                                @click="onCreditModeChange('DAYS')"
+                            />
+                            <Button
+                                label="Fecha límite"
+                                :outlined="membership.credit_mode !== 'DATE'"
+                                @click="onCreditModeChange('DATE')"
+                            />
+                        </div>
+                    </div>
+
+                    <div v-if="membership.credit_mode === 'DAYS'">
+                        <label class="font-bold block mb-2 text-xs uppercase text-gray-500">Días de plazo</label>
+                        <InputNumber
+                            v-model="membership.credit_days"
+                            showButtons
+                            :min="1"
+                            :max="365"
+                            placeholder="Ej: 15"
+                            class="w-full"
+                        />
+                        <small class="text-gray-500">Si no ingresas nada, el backend usará el plazo por defecto del gym.</small>
+                    </div>
+
+                    <div v-if="membership.credit_mode === 'DATE'">
+                        <label class="font-bold block mb-2 text-xs uppercase text-gray-500">Fecha límite de pago</label>
+                        <DatePicker
+                            v-model="membership.payment_due_date"
+                            dateFormat="dd/mm/yy"
+                            showIcon
+                            class="w-full"
+                        />
+                    </div>
+
+                    <div v-if="authStore.user?.role === 'STAFF'" class="mb-1">
+                        <label class="font-bold block mb-2 text-xs uppercase text-gray-500">PIN de autorización</label>
+                        <InputText
+                            v-model="membership.pin"
+                            type="password"
+                            placeholder="Ingrese PIN"
+                            class="w-full"
+                        />
+                    </div>
+                </div>
                 
                 <div v-if="changeAmount > 0" class="mt-3 p-2 bg-white border-round border-1 border-dashed border-orange-500 text-center shadow-1">
                     <span class="block text-orange-600 font-bold text-xs uppercase">Entregar Vuelto:</span>
                     <span class="text-2xl font-black text-orange-700">${{ changeAmount.toFixed(2) }}</span>
+                </div>
+
+                <div class="p-3 bg-gray-50 border-round border-1 border-gray-200">
+                    <div class="flex justify-between mb-2">
+                        <span class="text-sm text-gray-600">Total</span>
+                        <span class="font-bold">${{ totalToPay.toFixed(2) }}</span>
+                    </div>
+
+                    <div class="flex justify-between mb-2">
+                        <span class="text-sm text-gray-600">
+                            {{ membership.sale_type === 'CASH' ? 'Pagado' : 'Abono inicial' }}
+                        </span>
+                        <span class="font-bold">
+                            ${{ Number(membership.paid_amount || 0).toFixed(2) }}
+                        </span>
+                    </div>
+
+                    <div class="flex justify-between">
+                        <span class="text-sm text-gray-600">Saldo proyectado</span>
+                                                <span
+                            class="font-bold"
+                            :class="Math.max(totalToPay - Number(membership.paid_amount || 0), 0) > 0 ? 'text-orange-600' : 'text-green-600'"
+                        >
+                            ${{ Math.max(totalToPay - Number(membership.paid_amount || 0), 0).toFixed(2) }}
+                        </span>
+                    </div>
                 </div>
 
                 <div>
@@ -662,7 +903,22 @@ function onSaleTypeChange(type) {
 
             <template #footer>
                 <Button label="Cancelar" icon="pi pi-times" text @click="membershipDialog = false" />
-                <Button label="Registrar Venta" icon="pi pi-check" severity="success" @click="saveMembership" :disabled="!membership.plan_id" />
+                <Button
+                    label="Registrar Venta"
+                    icon="pi pi-check"
+                    severity="success"
+                    @click="saveMembership"
+                    :disabled="
+                        !membership.plan_id ||
+                        (membership.sale_type === 'CASH' && !membership.payment_method_id) ||
+                        (membership.sale_type === 'CREDIT' &&
+                            Number(membership.paid_amount || 0) > 0 &&
+                            !membership.payment_method_id) ||
+                        (membership.sale_type === 'CREDIT' &&
+                            membership.credit_mode === 'DATE' &&
+                            !membership.payment_due_date)
+                    "
+                />
             </template>
         </Dialog>
 

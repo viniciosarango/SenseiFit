@@ -15,6 +15,8 @@ from django.utils.encoding import force_bytes
 
 from core.services.integrations.make_webhook_service import send_make_event
 
+WHATSAPP_CLOUD_ENABLED = getattr(settings, "WHATSAPP_CLOUD_ENABLED", False)
+
 
 
 User = get_user_model()
@@ -173,7 +175,7 @@ def create_client_with_user_service(
         
 
         # ✅ WhatsApp (cliente existente con user) - único envío
-        if client.user is not None and frontend_url and client.phone:
+        if WHATSAPP_CLOUD_ENABLED and client.user is not None and frontend_url and client.phone:
             user = client.user
             token = PasswordResetTokenGenerator().make_token(user)
             uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
@@ -324,7 +326,7 @@ def create_client_with_user_service(
             )
 
         try:
-            if client.phone:
+            if WHATSAPP_CLOUD_ENABLED and client.phone:
                 gym_name = getattr(gym, "name", "") or "SenseiFit"
                 full_name = f"{first_name} {last_name}".strip() or "Hola"
                 send_whatsapp_template(

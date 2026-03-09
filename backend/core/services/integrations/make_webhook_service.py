@@ -3,6 +3,17 @@ from django.conf import settings
 from django.utils import timezone
 
 
+def _truncate_large_strings(value, max_length=1000):
+    if isinstance(value, str):
+        return value if len(value) <= max_length else value[:max_length] + "..."
+    if isinstance(value, dict):
+        return {k: _truncate_large_strings(v, max_length=max_length) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_truncate_large_strings(v, max_length=max_length) for v in value]
+    return value
+
+
+
 def send_make_event(*, event: str, data: dict):
     """
     Envia un evento a Make (Custom Webhook).
@@ -14,10 +25,12 @@ def send_make_event(*, event: str, data: dict):
     if not url:
         return {"skipped": True, "reason": "make_webhook_not_configured"}
 
+    safe_data = _truncate_large_strings(data or {}, max_length=1000)
+
     payload = {
         "event": event,
         "sent_at": timezone.now().isoformat(),
-        "data": data or {},
+        "data": safe_data,
     }
 
     headers = {"Content-Type": "application/json"}
