@@ -50,12 +50,22 @@ def sync_hikvision_async(membership):
     }
 
     try:
+
+        print("HIK_SYNC_START", flush=True)
+        print(f"HIK_EMPLOYEE_NO={employee_no}", flush=True)
+        print(f"HIK_BEGIN={begin_time}", flush=True)
+        print(f"HIK_END={end_time}", flush=True)
+        print(f"HIK_PAYLOAD={payload}", flush=True)
+
         response = requests.put(
             HIK_URL, 
             json=payload, 
             auth=HTTPDigestAuth(HIK_USER, HIK_PASS), 
             timeout=HIK_TIMEOUT
         )
+
+        print(f"HIK_STATUS={response.status_code}", flush=True)
+        print(f"HIK_RESPONSE={response.text}", flush=True)
         
         if response.status_code == 200:
             result = response.json()
@@ -91,19 +101,33 @@ def revoke_hikvision_access(membership):
     payload = {
         "UserInfo": {
             "employeeNo": employee_no,
+            "name": f"{client.first_name} {client.last_name}"[:32],
+            "userType": "normal",
+            "email": getattr(client, "email", "") or "",
+            "phoneNumber": getattr(client, "phone", "") or "",
             "Valid": {
-                "enable": False
+                "enable": True,
+                "beginTime": "2020-01-01T00:00:00",
+                "endTime": "2020-01-01T23:59:59",
+                "timeType": "local"
             }
         }
     }
 
     try:
+        print("HIK_REVOKE_START", flush=True)
+        print(f"HIK_REVOKE_EMPLOYEE_NO={employee_no}", flush=True)
+        print(f"HIK_REVOKE_PAYLOAD={payload}", flush=True)        
+
         response = requests.put(
             HIK_URL,
             json=payload,
             auth=HTTPDigestAuth(HIK_USER, HIK_PASS),
             timeout=HIK_TIMEOUT
         )
+
+        print(f"HIK_REVOKE_STATUS={response.status_code}", flush=True)
+        print(f"HIK_REVOKE_RESPONSE={response.text}", flush=True)
 
         if response.status_code == 200:
             return True, "Acceso revocado en Hikvision"

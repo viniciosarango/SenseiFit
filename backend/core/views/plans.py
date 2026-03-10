@@ -15,7 +15,8 @@ class PlanViewSet(CompanyGymScopedViewSet):
         queryset = super().get_queryset()
 
         gym_id = self.request.query_params.get("gym")
-        if gym_id:
+
+        if gym_id and gym_id != "null":
             queryset = queryset.filter(gym_id=gym_id)
 
         return queryset

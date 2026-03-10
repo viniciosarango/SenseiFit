@@ -3,6 +3,8 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 
+from core.utils.hikvision import sync_hikvision_async
+
 from django.utils import timezone
 
 from core.models import Membership, ClientGym, Gym, Company
@@ -231,6 +233,9 @@ class MembershipViewSet(CompanyGymScopedViewSet):
                 activated_by=request.user
             )
 
+            if updated.client.hikvision_id and updated.start_date and updated.end_date:
+                sync_hikvision_async(updated)
+
             serializer = self.get_serializer(updated)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -349,3 +354,32 @@ class MembershipViewSet(CompanyGymScopedViewSet):
 
         serializer = self.get_serializer(membership)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+
+    @action(detail=True, methods=["post"], url_path="sync-hikvision")
+    def sync_hikvision(self, request, pk=None):
+        membership = self.get_object()
+        client = membership.client
+
+        if not client.hikvision_id:
+            raise ValidationError({"detail": "El cliente no tiene hikvision_id configurado."})
+
+        if not membership.start_date or not membership.end_date:
+            raise ValidationError({"detail": "La membresía no tiene fechas válidas para sincronizar."})
+
+        ok, message = sync_hikvision_async(membership)
+
+        if ok:
+            serializer = self.get_serializer(membership)
+            return Response(
+                {
+                    "detail": message,
+                    "membership": serializer.data,
+                },
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            {"detail": message},
+            status=status.HTTP_400_BAD_REQUEST
+        )

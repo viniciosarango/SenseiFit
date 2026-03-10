@@ -52,4 +52,10 @@ export const MembershipService = {
         return response.data;
     },
 
+
+    async syncHikvision(id) {
+        const response = await api.post(`/memberships/${id}/sync-hikvision/`);
+        return response.data;
+    },
+
 };

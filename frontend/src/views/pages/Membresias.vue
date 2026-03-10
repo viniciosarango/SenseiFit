@@ -140,6 +140,14 @@ const rowMenuItems = computed(() => {
         });
     }
 
+    if (['ACTIVE', 'SCHEDULED', 'FROZEN', 'EXPIRED'].includes(m.operational_status)) {
+        items.push({
+            label: 'Sincronizar Hikvision',
+            icon: 'pi pi-refresh',
+            command: () => syncMembershipHikvision(m)
+        });
+    }    
+
     if (['ACTIVE', 'SCHEDULED'].includes(m.operational_status)) {
         items.push({
             label: 'Cancelar membresía',
@@ -478,6 +486,30 @@ const activateMembership = async (membership) => {
         });
     }
 };
+
+const syncMembershipHikvision = async (membership) => {
+    try {
+        const response = await MembershipService.syncHikvision(membership.id);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Hikvision',
+            detail: response.detail || 'Sincronización exitosa',
+            life: 3000
+        });
+
+        loadMemberships();
+    } catch (error) {
+        const errorMsg = error.response?.data?.detail || 'No se pudo sincronizar con Hikvision';
+        toast.add({
+            severity: 'error',
+            summary: 'Error Hikvision',
+            detail: errorMsg,
+            life: 4000
+        });
+    }
+};
+
 
 </script>
 

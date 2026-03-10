@@ -6,7 +6,7 @@ from core.models import Membership, Payment, Plan, PaymentMethod
 from django.db import IntegrityError
 
 from django.core.exceptions import ValidationError
-from core.utils.hikvision import sync_hikvision_async
+from core.utils.hikvision import sync_hikvision_async, revoke_hikvision_access
 
 
 class MembershipError(Exception):
@@ -324,7 +324,7 @@ def cancel_membership_service(*, membership, requested_by, pin: str, reason: str
     membership.save(update_fields=["operational_status", "payment_due_date", "notes"])    
 
     # 4) (Opcional) sync hikvision para cortar acceso
-    sync_hikvision_async(membership)
+    revoke_hikvision_access(membership)
 
     return membership
 
@@ -443,6 +443,9 @@ def freeze_membership_service(*, membership: Membership, requested_by, pin: str)
         "freeze_timestamp"
     ])
 
+    if membership.client.hikvision_id:
+        revoke_hikvision_access(membership)
+
     return membership
 
 
@@ -518,7 +521,7 @@ def unfreeze_membership_service(*, membership: Membership, requested_by, pin: st
         future.save(update_fields=["start_date", "end_date", "renovation_date"])
         next_start = future.end_date + timedelta(days=1)    
 
-    from core.utils.hikvision import sync_hikvision_async
+    
     sync_hikvision_async(membership)
 
     return membership
