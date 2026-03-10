@@ -392,7 +392,7 @@ async function saveMembership() {
         client: Number(membership.value.client),
         plan_id: Number(membership.value.plan_id),
         sale_type: membership.value.sale_type,
-        paid_amount: Number(membership.value.paid_amount || 0),
+        paid_amount: Number(Number(membership.value.paid_amount || 0).toFixed(2)),
         payment_method_id: membership.value.payment_method_id ? Number(membership.value.payment_method_id) : undefined,
         discount_percent_applied: Number(membership.value.discount_percent_applied || 0),
         enrollment_fee_applied: Number(membership.value.enrollment_fee_applied || 0),
