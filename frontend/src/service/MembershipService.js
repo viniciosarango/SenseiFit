@@ -58,4 +58,9 @@ export const MembershipService = {
         return response.data;
     },
 
+    async syncHikvisionBulk() {
+        const response = await api.post('/memberships/sync-hikvision-bulk/');
+        return response.data;
+    },
+
 };

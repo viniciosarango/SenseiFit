@@ -74,6 +74,54 @@ class MembershipViewSet(CompanyGymScopedViewSet):
         return Response(serializer.data)
 
 
+    @action(detail=False, methods=["post"], url_path="sync-hikvision-bulk")
+    def sync_hikvision_bulk(self, request):
+        queryset = self.get_queryset().filter(
+            operational_status__in=["ACTIVE", "SCHEDULED"]
+        ).select_related("client")
+
+        total = 0
+        synced = 0
+        skipped = 0
+        failed = 0
+        errors = []
+
+        for membership in queryset:
+            total += 1
+
+            client = membership.client
+            if not client or not client.hikvision_id:
+                skipped += 1
+                continue
+
+            if not membership.start_date or not membership.end_date:
+                skipped += 1
+                continue
+
+            ok, message = sync_hikvision_async(membership)
+            if ok:
+                synced += 1
+            else:
+                failed += 1
+                errors.append({
+                    "membership_id": membership.id,
+                    "client_name": getattr(client, "full_name", str(client)),
+                    "hikvision_id": client.hikvision_id,
+                    "error": message,
+                })
+
+        return Response(
+            {
+                "detail": "Sincronización masiva finalizada",
+                "total": total,
+                "synced": synced,
+                "skipped": skipped,
+                "failed": failed,
+                "errors": errors[:20],
+            },
+            status=status.HTTP_200_OK
+        )
+
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

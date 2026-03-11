@@ -510,6 +510,28 @@ const syncMembershipHikvision = async (membership) => {
     }
 };
 
+const syncAllHikvision = async () => {
+    try {
+        const response = await MembershipService.syncHikvisionBulk();
+
+        toast.add({
+            severity: response.failed > 0 ? 'warn' : 'success',
+            summary: 'Hikvision',
+            detail: `Sincronizadas: ${response.synced} | Omitidas: ${response.skipped} | Fallidas: ${response.failed}`,
+            life: 5000
+        });
+
+        loadMemberships();
+    } catch (error) {
+        const errorMsg = error.response?.data?.detail || 'No se pudo ejecutar la sincronización masiva';
+        toast.add({
+            severity: 'error',
+            summary: 'Error Hikvision',
+            detail: errorMsg,
+            life: 4000
+        });
+    }
+};
 
 </script>
 
@@ -517,6 +539,7 @@ const syncMembershipHikvision = async (membership) => {
     <div class="card">
 
         <div class="w-full flex justify-end gap-2 mb-3">
+            <Button label="Sync Hikvision" severity="help" @click="syncAllHikvision" />
             <Button label="Activas" :outlined="membershipStatus !== 'ACTIVE'" @click="membershipStatus='ACTIVE'; loadMemberships()" />
             <Button label="Programadas" :outlined="membershipStatus !== 'SCHEDULED'" @click="membershipStatus='SCHEDULED'; loadMemberships()" />
             <Button label="Congeladas" :outlined="membershipStatus !== 'FROZEN'" @click="membershipStatus='FROZEN'; loadMemberships()" />
