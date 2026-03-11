@@ -363,6 +363,18 @@ const loadMemberships = async () => {
     }
 };
 
+const setMembershipStatusFilter = (status) => {
+    membershipStatus.value = status;
+    expiryFilter.value = null;
+    loadMemberships();
+};
+
+const setExpiryFilter = (filter) => {
+    membershipStatus.value = 'ALL';
+    expiryFilter.value = expiryFilter.value === filter ? null : filter;
+    loadMemberships();
+};
+
 // Severidad para los Tags de Estado Operativo
 const getStatusSeverity = (status) => {
     switch (status) {
@@ -545,25 +557,27 @@ const syncAllHikvision = async () => {
 
         <div class="w-full flex justify-end gap-2 mb-3">
             <Button label="Sync Hikvision" severity="help" @click="syncAllHikvision" />
-            <Button label="Activas" :outlined="membershipStatus !== 'ACTIVE'" @click="membershipStatus='ACTIVE'; loadMemberships()" />
+            
+            <Button label="Activas" :outlined="membershipStatus !== 'ACTIVE' || !!expiryFilter" @click="setMembershipStatusFilter('ACTIVE')" />
+            <Button label="Programadas" :outlined="membershipStatus !== 'SCHEDULED' || !!expiryFilter" @click="setMembershipStatusFilter('SCHEDULED')" />
+            <Button label="Congeladas" :outlined="membershipStatus !== 'FROZEN' || !!expiryFilter" @click="setMembershipStatusFilter('FROZEN')" />
+            <Button label="Canceladas" :outlined="membershipStatus !== 'CANCELLED' || !!expiryFilter" @click="setMembershipStatusFilter('CANCELLED')" />
+            <Button label="Vencidas" :outlined="membershipStatus !== 'EXPIRED' || !!expiryFilter" @click="setMembershipStatusFilter('EXPIRED')" />
+            <Button label="Todas" :outlined="membershipStatus !== 'ALL' || !!expiryFilter" @click="setMembershipStatusFilter('ALL')" />
             <Button
                 label="Caduca hoy"
                 :outlined="expiryFilter !== 'today'"
                 severity="warning"
-                @click="expiryFilter = expiryFilter === 'today' ? null : 'today'; loadMemberships()"
+                @click="setExpiryFilter('today')"
             />
 
             <Button
                 label="Próx. 3 días"
                 :outlined="expiryFilter !== 'next_3_days'"
                 severity="help"
-                @click="expiryFilter = expiryFilter === 'next_3_days' ? null : 'next_3_days'; loadMemberships()"
+                @click="setExpiryFilter('next_3_days')"
             />
-            <Button label="Programadas" :outlined="membershipStatus !== 'SCHEDULED'" @click="membershipStatus='SCHEDULED'; loadMemberships()" />
-            <Button label="Congeladas" :outlined="membershipStatus !== 'FROZEN'" @click="membershipStatus='FROZEN'; loadMemberships()" />
-            <Button label="Canceladas" :outlined="membershipStatus !== 'CANCELLED'" @click="membershipStatus='CANCELLED'; loadMemberships()" />
-            <Button label="Vencidas" :outlined="membershipStatus !== 'EXPIRED'" @click="membershipStatus='EXPIRED'; loadMemberships()" />
-            <Button label="Todas" :outlined="membershipStatus !== 'ALL'" @click="membershipStatus='ALL'; loadMemberships()" />
+            
         </div>
 
 
