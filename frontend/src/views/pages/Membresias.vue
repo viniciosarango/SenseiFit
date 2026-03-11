@@ -223,6 +223,7 @@ const paymentMethods = ref([]);
 const upgradePlans = ref([]);
 
 const membershipStatus = ref('ACTIVE');
+const expiryFilter = ref(null);
 
 
 const openCancelDialog = (data) => {
@@ -348,6 +349,10 @@ const loadMemberships = async () => {
 
         if (membershipStatus.value !== 'ALL') {
             params.operational_status = membershipStatus.value;
+        }
+
+        if (expiryFilter.value) {
+            params.expiry_filter = expiryFilter.value;
         }
 
         memberships.value = await MembershipService.getAllMemberships(params);
@@ -541,6 +546,19 @@ const syncAllHikvision = async () => {
         <div class="w-full flex justify-end gap-2 mb-3">
             <Button label="Sync Hikvision" severity="help" @click="syncAllHikvision" />
             <Button label="Activas" :outlined="membershipStatus !== 'ACTIVE'" @click="membershipStatus='ACTIVE'; loadMemberships()" />
+            <Button
+                label="Caduca hoy"
+                :outlined="expiryFilter !== 'today'"
+                severity="warning"
+                @click="expiryFilter = expiryFilter === 'today' ? null : 'today'; loadMemberships()"
+            />
+
+            <Button
+                label="Próx. 3 días"
+                :outlined="expiryFilter !== 'next_3_days'"
+                severity="help"
+                @click="expiryFilter = expiryFilter === 'next_3_days' ? null : 'next_3_days'; loadMemberships()"
+            />
             <Button label="Programadas" :outlined="membershipStatus !== 'SCHEDULED'" @click="membershipStatus='SCHEDULED'; loadMemberships()" />
             <Button label="Congeladas" :outlined="membershipStatus !== 'FROZEN'" @click="membershipStatus='FROZEN'; loadMemberships()" />
             <Button label="Canceladas" :outlined="membershipStatus !== 'CANCELLED'" @click="membershipStatus='CANCELLED'; loadMemberships()" />

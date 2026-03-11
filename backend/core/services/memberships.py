@@ -167,10 +167,19 @@ def create_membership_service(
             created_by=created_by
         )
 
-    if membership.start_date and membership.end_date:
+    membership.hikvision_synced = False
+    membership.hikvision_message = ""
+    membership.hikvision_attempted = False
+
+    if membership.client and membership.client.hikvision_id and membership.start_date and membership.end_date:
+        membership.hikvision_attempted = True
         try:
-            sync_hikvision_async(membership)
+            ok, message = sync_hikvision_async(membership)
+            membership.hikvision_synced = bool(ok)
+            membership.hikvision_message = message or ""
         except Exception as e:
+            membership.hikvision_synced = False
+            membership.hikvision_message = str(e)
             print("Hikvision sync error:", str(e), flush=True)
 
     membership.refresh_from_db()

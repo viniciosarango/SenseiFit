@@ -2,6 +2,7 @@ from rest_framework.decorators import action
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
+from datetime import timedelta
 
 from core.utils.hikvision import sync_hikvision_async
 
@@ -37,6 +38,7 @@ class MembershipViewSet(CompanyGymScopedViewSet):
         client_id = self.request.query_params.get('client_id')
         f_status = self.request.query_params.get('financial_status')
         o_status = self.request.query_params.get('operational_status')
+        expiry_filter = self.request.query_params.get('expiry_filter')        
 
         if client_id:
             queryset = queryset.filter(client_id=client_id)
@@ -45,7 +47,22 @@ class MembershipViewSet(CompanyGymScopedViewSet):
             queryset = queryset.filter(financial_status__in=f_status.split(','))
 
         if o_status:
-            queryset = queryset.filter(operational_status__in=o_status.split(','))        
+            queryset = queryset.filter(operational_status__in=o_status.split(','))
+
+        today = timezone.localdate()
+
+        if expiry_filter == "today":
+            queryset = queryset.filter(
+                operational_status="ACTIVE",
+                end_date=today
+            )
+
+        elif expiry_filter == "next_3_days":
+            queryset = queryset.filter(
+                operational_status="ACTIVE",
+                end_date__gt=today,
+                end_date__lte=today + timedelta(days=3)
+            )
 
         return queryset.select_related('client', 'plan').order_by('-created_at')
     
@@ -224,7 +241,15 @@ class MembershipViewSet(CompanyGymScopedViewSet):
             )
 
             response_serializer = self.get_serializer(membership)
-            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+            response_data = {
+                **response_serializer.data,
+                "hikvision_attempted": getattr(membership, "hikvision_attempted", False),
+                "hikvision_synced": getattr(membership, "hikvision_synced", False),
+                "hikvision_message": getattr(membership, "hikvision_message", ""),
+            }
+
+            return Response(response_data, status=status.HTTP_201_CREATED)
 
         except MembershipError as e:
             raise ValidationError({"detail": str(e)})

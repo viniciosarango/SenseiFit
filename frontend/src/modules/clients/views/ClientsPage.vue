@@ -510,8 +510,33 @@ async function saveMembership() {
     
 
     try {
-        await MembershipService.createMembership(dataToSend);
-        toast.add({ severity: 'success', summary: 'Venta Confirmada', detail: 'Membresía registrada correctamente', life: 3000 });
+        const response = await MembershipService.createMembership(dataToSend);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Venta Confirmada',
+            detail: 'Membresía registrada correctamente',
+            life: 3000
+        });
+
+        if (response?.hikvision_attempted && response?.hikvision_synced) {
+            toast.add({
+                severity: 'success',
+                summary: 'Hikvision',
+                detail: response?.hikvision_message || 'Sincronización Hikvision OK',
+                life: 3500
+            });
+        }
+
+        if (response?.hikvision_attempted && !response?.hikvision_synced) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Hikvision',
+                detail: response?.hikvision_message || 'La membresía se creó, pero Hikvision no se pudo sincronizar.',
+                life: 4500
+            });
+        }
+
         membershipDialog.value = false;
         
         membership.value = {
