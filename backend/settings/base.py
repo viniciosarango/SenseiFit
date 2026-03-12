@@ -2,6 +2,7 @@ import os
 import environ
 from pathlib import Path
 from datetime import timedelta
+from corsheaders.defaults import default_headers
 
 
 
@@ -47,10 +48,9 @@ HIKVISION_CONFIG = {
 }
 
 ATTENDANCE_WEBHOOK_KEY = env("ATTENDANCE_WEBHOOK_KEY")
-
+ATTENDANCE_SCREEN_KEY = env("ATTENDANCE_SCREEN_KEY", default="")
 
 CANCEL_PIN = env('CANCEL_PIN')
-
 
 
 INSTALLED_APPS = [
@@ -163,7 +163,9 @@ REST_FRAMEWORK = {
     ),
 }
 
-
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "x-screen-key",
+]
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=8), # La llave dura 8 horas (tu jornada)

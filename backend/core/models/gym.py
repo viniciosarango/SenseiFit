@@ -55,6 +55,53 @@ class Gym(models.Model):
     )
 
     # -------------------------
+    # Configuración pantalla TV
+    # -------------------------
+    tv_idle_mode = models.CharField(
+        max_length=20,
+        default="text",
+        help_text="Modo idle de la TV: text, image, video, youtube"
+    )
+
+    tv_idle_title = models.CharField(
+        max_length=150,
+        blank=True,
+        default="Dorians Gym"
+    )
+
+    tv_idle_subtitle = models.CharField(
+        max_length=150,
+        blank=True,
+        default="¡Transforma tu vida!"
+    )
+
+    tv_idle_message = models.CharField(
+        max_length=255,
+        blank=True,
+        default="Esperando próximo acceso..."
+    )
+
+    tv_idle_image_url = models.URLField(
+        blank=True,
+        default=""
+    )
+
+    tv_idle_video_url = models.URLField(
+        blank=True,
+        default=""
+    )
+
+    tv_idle_youtube_url = models.URLField(
+        blank=True,
+        default=""
+    )
+
+    tv_event_display_seconds = models.PositiveIntegerField(
+        default=10,
+        help_text="Segundos que se muestra el evento antes de volver al modo idle."
+    )
+
+    # -------------------------
     # Estado del gym
     # -------------------------
     is_active = models.BooleanField(default=True)

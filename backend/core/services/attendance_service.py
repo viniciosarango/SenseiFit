@@ -131,9 +131,9 @@ def register_attendance(
 
         if remaining_before <= 0:
             attendance.is_allowed = False
-            attendance.denial_reason = "no_sessions_left"
+            attendance.access_status = "DENIED"
             attendance.message_displayed = "No tienes sesiones disponibles."
-            attendance.save(update_fields=["is_allowed", "denial_reason", "message_displayed"])
+            attendance.save(update_fields=["is_allowed", "access_status", "message_displayed"])
 
             return AttendanceResult(
                 success=False,

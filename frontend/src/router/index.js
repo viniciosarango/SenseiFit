@@ -17,6 +17,12 @@ const router = createRouter({
       name: 'reset-password',
       component: () => import('@/views/pages/auth/ResetPassword.vue'),
     },
+
+    {
+      path: '/attendance-live',
+      name: 'attendance-live',
+      component: () => import('@/views/pages/AttendanceLiveScreen.vue')
+    },
         
 
     {
@@ -82,9 +88,9 @@ const router = createRouter({
           component: () => import('@/views/pages/ClientProfile.vue'),
         },
 
-        { path: '/privacy', name: 'privacy', component: () => import('@/views/pages/PrivacyPolicy.vue') }
+        { path: '/privacy', name: 'privacy', component: () => import('@/views/pages/PrivacyPolicy.vue') },
 
-        
+                
 
       ]
     }

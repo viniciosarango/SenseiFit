@@ -230,7 +230,36 @@ class MembershipAdmin(admin.ModelAdmin):
 class GymAdmin(admin.ModelAdmin):
     list_display = ("id", "name", "company", 'default_payment_grace_days') # Para verlo en la lista
     search_fields = ("name",)
-    fields = ('name', 'address', 'default_payment_grace_days') # Para editarlo adentro
+    
+    fieldsets = (
+        ("Información básica", {
+            "fields": ("company", "name", "address", "phone", "email")
+        }),
+        ("Branding", {
+            "fields": ("logo", "primary_color", "secondary_color")
+        }),
+        ("Configuración financiera", {
+            "fields": ("currency", "default_payment_grace_days")
+        }),
+        ("Control de acceso", {
+            "fields": ("access_control_enabled", "auto_block_on_debt")
+        }),
+        ("Mensajes automáticos", {
+            "fields": ("birthday_message", "expiration_alert_message")
+        }),
+        ("Pantalla TV", {
+            "fields": (
+                "tv_idle_mode",
+                "tv_idle_title",
+                "tv_idle_subtitle",
+                "tv_idle_message",
+                "tv_idle_image_url",
+                "tv_idle_video_url",
+                "tv_idle_youtube_url",
+                "tv_event_display_seconds",
+            )
+        }),
+    )
 
 
 
