@@ -95,6 +95,20 @@ const formatShortDate = (value) => {
   return `${day}-${month}-${year}`
 }
 
+const getPhotoUrl = (photoUrl) => {
+  if (!photoUrl) return ''
+
+  if (photoUrl.startsWith('http://') || photoUrl.startsWith('https://')) {
+    return photoUrl
+  }
+
+  const apiBase = import.meta.env.VITE_API_URL || ''
+  const origin = apiBase.startsWith('http')
+    ? apiBase.replace(/\/api\/?$/, '')
+    : window.location.origin
+
+  return `${origin}${photoUrl}`
+}
 
 onMounted(() => {
   fetchLastAttendance()
@@ -120,7 +134,8 @@ onBeforeUnmount(() => {
 
       <div v-if="data.photo_url" class="flex justify-center mb-8">
         <img
-            :src="`http://127.0.0.1:8000${data.photo_url}`"
+            
+            :src="getPhotoUrl(data.photo_url)"
             class="w-40 h-40 rounded-full object-cover border-4 border-[#D9B310] shadow-2xl"
         />
       </div>
@@ -217,7 +232,7 @@ onBeforeUnmount(() => {
 
         <img
             v-if="item.photo_url"
-            :src="`http://127.0.0.1:8000${item.photo_url}`"
+            :src="getPhotoUrl(item.photo_url)"
             class="w-12 h-12 rounded-full object-cover"
         />
 
