@@ -68,7 +68,7 @@ const fetchLastAttendance = async () => {
 
     history.value.unshift(newData)
 
-    if (history.value.length > 10) {
+    if (history.value.length > 5) {
         history.value.pop()
     }
     }
