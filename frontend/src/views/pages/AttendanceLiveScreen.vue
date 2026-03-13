@@ -79,10 +79,8 @@ const fetchLastAttendance = async () => {
 }
 
 const cardClass = computed(() => {
-  if (data.value.color === 'green') return 'bg-green-600'
-  if (data.value.color === 'yellow') return 'bg-yellow-500 text-black'
-  if (data.value.color === 'orange') return 'bg-orange-500'
-  return 'bg-red-600'
+  if (data.value.days_left < 0) return 'bg-[#C4312B] text-white'
+  return 'bg-[#0B3C5D] text-white'
 })
 
 const formatDate = (value) => {
@@ -116,29 +114,36 @@ onBeforeUnmount(() => {
     <!-- EVENTO PRINCIPAL -->
     <div class="col-span-7 rounded-3xl shadow-2xl p-12 flex flex-col justify-center" :class="[cardClass, flash ? 'scale-110 brightness-110' : '']">
 
-      <p class="text-sm uppercase tracking-widest opacity-80 mb-4 text-center">
+      <p class="text-sm uppercase tracking-[0.2em] text-[#D9B310] mb-4 text-center font-semibold">
         Pantalla en vivo
       </p>
 
-      <div v-if="data.photo_url" class="flex justify-center mb-6">
+      <div v-if="data.photo_url" class="flex justify-center mb-8">
         <img
             :src="`http://127.0.0.1:8000${data.photo_url}`"
-            class="w-32 h-32 rounded-full object-cover border-4 border-white shadow-xl"
+            class="w-40 h-40 rounded-full object-cover border-4 border-[#D9B310] shadow-2xl"
         />
-    </div>
+      </div>
 
-      <h1 class="text-5xl font-bold mb-4 text-center">
+      <h1 class="text-5xl font-bold mb-4 text-center text-[#D9B310]">
         {{ data.client || 'Sin datos' }}
       </h1>
 
-      <p class="text-2xl font-semibold mb-6 text-center">
+      <p class="text-2xl font-semibold mb-8 text-center text-white max-w-4xl mx-auto leading-snug">
         {{ data.message || data.notes || 'Esperando evento...' }}
       </p>
 
       <div
-        v-if="data.end_date"
-        class="mb-6 rounded-2xl p-4 text-center text-2xl font-semibold"
-        :class="data.days_left <= 3 ? 'bg-red-500/20 border border-red-300' : 'bg-white/10'"
+        <div
+          v-if="data.end_date"
+          class="mb-10 rounded-2xl p-7 text-center text-3xl font-bold"
+          :class="data.days_left < 0
+            ? 'bg-[#C4312B] text-white border border-[#C4312B]'
+            : data.days_left === 0
+              ? 'bg-[#A12A2A] text-white border border-[#A12A2A]'
+              : data.days_left <= 3
+                ? 'bg-[#D9B310] text-[#0B3C5D] border border-white/20'
+                : 'bg-[#0A314D] text-white border border-[#328CC1]/30'"
         >
         <span v-if="data.days_left < 0">
             Membresía vencida hace {{ Math.abs(data.days_left) }} día<span v-if="Math.abs(data.days_left) !== 1">s</span>
@@ -162,51 +167,34 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="grid grid-cols-2 gap-4 mb-4">
-  <div class="bg-white/20 rounded-2xl p-4 border border-white/30">
-    <div class="text-sm font-semibold opacity-90">Inicio</div>
-    <div class="text-lg font-bold mt-1">{{ formatShortDate(data.start_date) }}</div>
-  </div>
+      <div class="bg-white/10 rounded-2xl p-5 border border-white/10 text-center">
+        <div class="text-base font-semibold text-[#D9B310] mb-2">Inicio</div>
+        <div class="text-3xl font-bold text-white leading-none">{{ formatShortDate(data.start_date) }}</div>
+      </div>
 
-  <div class="bg-white/20 rounded-2xl p-4 border border-white/30">
-    <div class="text-sm font-semibold opacity-90">Fin</div>
-    <div class="text-lg font-bold mt-1">{{ formatShortDate(data.end_date) }}</div>
-  </div>
-</div>
+      <div class="bg-white/10 rounded-2xl p-5 border border-white/10 text-center">
+        <div class="text-base font-semibold text-[#D9B310] mb-2">Fin</div>
+        <div class="text-3xl font-bold text-white leading-none">{{ formatShortDate(data.end_date) }}</div>
+      </div>
+    </div>
 
       <div class="grid grid-cols-3 gap-4 text-lg">
-
         <div class="bg-white/10 rounded-2xl p-6">
-          <span class="font-semibold">Plan:</span>
-          {{ data.plan || '—' }}
+          <span class="font-semibold text-[#D9B310]">Plan:</span>
+          <span class="text-white"> {{ data.plan || '—' }}</span>
         </div>
 
         <div class="bg-white/10 rounded-2xl p-6">
-          <span class="font-semibold">Resultado:</span>
-          {{ data.access_result || '—' }}
+          <span class="font-semibold text-[#D9B310]">Resultado:</span>
+          <span class="text-white"> {{ data.access_result || '—' }}</span>
         </div>
 
         <div class="bg-white/10 rounded-2xl p-6">
-          <span class="font-semibold">Dirección:</span>
-          {{ data.direction || '—' }}
+          <span class="font-semibold text-[#D9B310]">Hora:</span>
+          <span class="text-white"> {{ formatDate(data.check_in_time) }}</span>
         </div>
+      </div>      
 
-        <div class="bg-white/10 rounded-2xl p-6">
-          <span class="font-semibold">Hora:</span>
-          {{ formatDate(data.check_in_time) }}
-        </div>
-
-        <div class="bg-white/10 rounded-2xl p-6">
-          <span class="font-semibold">Dispositivo:</span>
-          {{ data.device_name || data.device_id || '—' }}
-        </div>
-
-        <div class="bg-white/10 rounded-2xl p-6">
-          <span class="font-semibold">Person ID:</span>
-          {{ data.hikvision_person_id || '—' }}
-        </div>
-
-      
-      </div>
         <p class="mt-10 text-center text-2xl font-bold opacity-90 tracking-wide">
   Dorians Gym - ¡Transforma tu vida!
 </p>
@@ -215,16 +203,16 @@ onBeforeUnmount(() => {
 
 
     <!-- HISTORIAL -->
-    <div class="col-span-3 bg-neutral-900 rounded-3xl p-6 flex flex-col gap-4">
+    <div class="col-span-3 bg-[#328CC1] text-white rounded-3xl p-6 flex flex-col gap-4">
 
-      <h2 class="text-xl font-semibold mb-4">
+      <h2 class="text-3xl font-bold mb-6 text-[#D9B310]">
         Últimos accesos
       </h2>
 
       <div
         v-for="item in history"
         :key="item.access_event_id"
-        class="bg-white/10 rounded-xl p-4 flex items-center gap-3"
+        class="bg-[#0B3C5D] rounded-xl p-4 flex items-center gap-3"
         >
 
         <img
@@ -234,8 +222,8 @@ onBeforeUnmount(() => {
         />
 
         <div>
-            <p class="font-semibold text-lg">
-            {{ item.client }}
+            <p class="font-semibold text-lg text-[#7EC8E3]">
+              {{ item.client }}
             </p>
 
             <p class="text-sm opacity-80">
@@ -243,11 +231,12 @@ onBeforeUnmount(() => {
             </p>
 
             <p
-            class="text-sm font-semibold"
-            :class="item.access_result === 'granted' ? 'text-green-400' : 'text-red-400'"
+              class="text-sm font-semibold"
+              :class="item.access_result === 'granted' ? 'text-white' : 'text-[#C4312B]'"
             >
-            {{ item.access_result }}
+              {{ item.access_result }}
             </p>
+
         </div>
 
         </div>
