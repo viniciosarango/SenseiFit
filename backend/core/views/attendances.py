@@ -25,7 +25,19 @@ class AttendanceWebhookView(APIView):
     def post(self, request):
 
         # 🔐 1. Validación API KEY
-        api_key = request.headers.get("X-API-KEY")
+        # api_key = request.headers.get("X-API-KEY")
+
+        # if api_key != settings.ATTENDANCE_WEBHOOK_KEY:
+        #     return Response(
+        #         {"success": False, "reason": "invalid_api_key"},
+        #         status=status.HTTP_403_FORBIDDEN
+        #     )
+
+        # 🔐 1. Validación API KEY
+        api_key = (
+            request.headers.get("X-API-KEY")
+            or request.query_params.get("api_key")
+        )
 
         if api_key != settings.ATTENDANCE_WEBHOOK_KEY:
             return Response(
