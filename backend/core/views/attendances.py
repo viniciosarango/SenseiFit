@@ -166,14 +166,20 @@ class AttendanceWebhookView(APIView):
             )         
 
         else:
-            access_event.access_result = "denied" if result.reason == "membership_expired" else ("granted" if result.success else "denied")
+            access_event.access_result = "denied"
             access_event.notes = result.message or ""
 
-            membership = getattr(result.attendance, "membership", None) if result.attendance else None
+            # Buscar última membresía del cliente (aunque esté vencida)
+            last_membership = (
+                client.memberships
+                .select_related("plan", "gym")
+                .order_by("-end_date", "-start_date")
+                .first()
+            )
 
-            if membership:
-                access_event.membership = membership
-                access_event.gym = membership.gym
+            if last_membership:
+                access_event.membership = last_membership
+                access_event.gym = last_membership.gym
 
             access_event.save(
                 update_fields=[
@@ -181,6 +187,8 @@ class AttendanceWebhookView(APIView):
                     "processing_error",
                     "access_result",
                     "notes",
+                    "membership",
+                    "gym",
                 ]
             )        
 
