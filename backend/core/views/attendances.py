@@ -166,14 +166,17 @@ class AttendanceWebhookView(APIView):
             )         
 
         else:
-            access_event.access_result = "granted" if result.success else "denied"
+            access_event.access_result = "denied" if result.reason == "membership_expired" else ("granted" if result.success else "denied")
+            access_event.notes = result.message or ""
+
             access_event.save(
                 update_fields=[
                     "processing_status",
                     "processing_error",
                     "access_result",
+                    "notes",
                 ]
-            )
+            )        
 
         http_status = (
             status.HTTP_200_OK if result.success

@@ -52,6 +52,10 @@ const fetchLastAttendance = async () => {
     }    
 
     lastEventId.value = newData.access_event_id
+    if (newData.reason === 'membership_expired') {
+      showEventScreen.value = true
+    }
+    
     if (!lastEventId.value && newData.access_event_id) {
         showEventScreen.value = true
 
