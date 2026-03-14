@@ -169,9 +169,11 @@ class AttendanceWebhookView(APIView):
             access_event.access_result = "denied" if result.reason == "membership_expired" else ("granted" if result.success else "denied")
             access_event.notes = result.message or ""
 
-            if result.membership:
-                access_event.membership = result.membership
-                access_event.gym = result.membership.gym
+            membership = getattr(result.attendance, "membership", None) if result.attendance else None
+
+            if membership:
+                access_event.membership = membership
+                access_event.gym = membership.gym
 
             access_event.save(
                 update_fields=[
