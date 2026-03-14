@@ -57,6 +57,14 @@ def register_attendance(
 
     # 2. Obtener membresía activa
     membership = _get_active_membership(client)
+    if not membership:
+        return AttendanceResult(
+            success=True,
+            attendance_created=False,
+            message="Tu membresía ha expirado. Por favor acércate a recepción.",
+            reason="membership_expired",
+            attendance=None,
+        )
     
     # Crear la asistencia ANTES de validar. 
     attendance = Attendance.objects.create(

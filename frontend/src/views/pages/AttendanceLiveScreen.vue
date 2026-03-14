@@ -112,7 +112,7 @@ const getPhotoUrl = (photoUrl) => {
 
 onMounted(() => {
   fetchLastAttendance()
-  intervalId = setInterval(fetchLastAttendance, 3000)
+  intervalId = setInterval(fetchLastAttendance, 1000)
 })
 
 onBeforeUnmount(() => {

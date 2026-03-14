@@ -25,6 +25,10 @@ from core.views.auth import PasswordResetConfirmView
 from core.views.token import FlexibleTokenObtainPairView
 from core.views.auth_login_resolve import ResolveLoginIdentifierView
 
+from core.views.client_attendances import ClientMyAttendancesView
+from core.views.client_attendance_calendar import ClientAttendanceCalendarView
+
+
 
 
 
@@ -73,5 +77,8 @@ urlpatterns = [
     path('api/auth/password-reset/confirm/', PasswordResetConfirmView.as_view()),
     path("api/token/", FlexibleTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/auth/resolve-login/", ResolveLoginIdentifierView.as_view()),
+
+    path('api/client/me/attendances/', ClientMyAttendancesView.as_view(), name='client-my-attendances'),
+    path('api/client/me/attendance-calendar/', ClientAttendanceCalendarView.as_view()),
 
 ]
