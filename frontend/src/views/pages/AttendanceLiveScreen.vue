@@ -83,7 +83,6 @@ const fetchLastAttendance = async () => {
 }
 
 const cardClass = computed(() => {
-  if (data.value.days_left < 0) return 'bg-[#C4312B] text-white'
   return 'bg-[#0B3C5D] text-white'
 })
 

@@ -32,6 +32,7 @@ const clientMenu = [
     label: 'Mi Cuenta',
     items: [
       { label: 'Mi Portal', icon: 'pi pi-fw pi-user', to: '/mi-portal' },
+      { label: 'Mis Asistencias', icon: 'pi pi-fw pi-calendar', to: '/mis-asistencias' },
       { label: 'Cuenta', icon: 'pi pi-fw pi-cog', to: '/account' },
       { label: 'Seguridad', icon: 'pi pi-fw pi-shield', to: '/seguridad' }
     ]

@@ -68,6 +68,12 @@ const router = createRouter({
         },
 
         {
+            path: '/mis-asistencias',
+            name: 'client-attendances',
+            component: () => import('@/views/pages/ClientAttendances.vue')
+        },
+
+        {
           path: '/clientes/:id/historial',
           name: 'client-history',
           component: () => import('@/modules/clients/views/ClientHistoryPage.vue'),
@@ -122,7 +128,7 @@ router.beforeEach((to, from, next) => {
 
     // 🔒 Cliente solo puede acceder a su portal y cuenta
     if (authStore.role === 'CLIENT') {
-    const allowedRoutes = ['/mi-portal', '/account', '/seguridad', '/verificar-email']
+    const allowedRoutes = ['/mi-portal', '/mis-asistencias', '/account', '/seguridad', '/verificar-email']
 
     if (!allowedRoutes.includes(to.path)) {
         return next('/mi-portal')
