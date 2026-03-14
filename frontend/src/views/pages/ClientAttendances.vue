@@ -1,12 +1,22 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+//import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+
 import api from '@/service/api'
 
 const attendances = ref([])
 const loading = ref(false)
 
 const summary = ref({})
+const attendanceCalendarDays = ref([])
+const calendarDays = ref([])
+
+
 const selectedMonth = ref(new Date().toISOString().slice(0, 7))
+const offset = ref(0)
+const hasNext = ref(false)
+
+let intervalId = null
 
 
 
@@ -16,14 +26,42 @@ const formatDate = (value) => {
   return `${day}-${month}-${year}`
 }
 
-const fetchAttendances = async () => {
+// const fetchAttendances = async () => {
+//   loading.value = true
+//   try {
+//     const response = await api.get(`client/me/attendances/?month=${selectedMonth.value}`)
+//     summary.value = response.data.meta?.summary || {}
+//     attendances.value = (response.data.items || []).slice().sort((a, b) => {
+//     return new Date(b.check_in_time) - new Date(a.check_in_time)
+//     })
+//   } catch (error) {
+//     console.error('Error cargando asistencias:', error)
+//   } finally {
+//     loading.value = false
+//   }
+// }
+
+const fetchAttendances = async (append = false) => {
   loading.value = true
   try {
-    const response = await api.get(`client/me/attendances/?month=${selectedMonth.value}`)
+    const response = await api.get(
+      `client/me/attendances/?month=${selectedMonth.value}&offset=${offset.value}`
+    )
+
     summary.value = response.data.meta?.summary || {}
-    attendances.value = (response.data.items || []).slice().sort((a, b) => {
-    return new Date(b.check_in_time) - new Date(a.check_in_time)
+    await fetchAttendanceCalendar()
+    hasNext.value = response.data.meta?.has_next || false
+
+    const rows = (response.data.items || []).slice().sort((a, b) => {
+      return new Date(b.check_in_time) - new Date(a.check_in_time)
     })
+
+    if (append) {
+      attendances.value = [...attendances.value, ...rows]
+    } else {
+      attendances.value = rows
+    }
+
   } catch (error) {
     console.error('Error cargando asistencias:', error)
   } finally {
@@ -31,18 +69,68 @@ const fetchAttendances = async () => {
   }
 }
 
+const loadMore = () => {
+  offset.value += 100
+  fetchAttendances(true)
+}
+
+
+// onMounted(() => {
+//   fetchAttendances()
+// })
+
 onMounted(() => {
   fetchAttendances()
+  intervalId = setInterval(fetchAttendances, 15000)
 })
 
+onBeforeUnmount(() => {
+  if (intervalId) clearInterval(intervalId)
+})
+
+
+
 const onMonthChange = () => {
+  offset.value = 0
+  attendances.value = []
   fetchAttendances()
 }
+
 
 const formatDateTime = (value) => {
   if (!value) return '—'
   return new Date(value).toLocaleDateString('es-EC')
 }
+
+const fetchAttendanceCalendar = async () => {
+  try {
+    const response = await api.get(`client/me/attendance-calendar/?month=${selectedMonth.value}`)
+    attendanceCalendarDays.value = response.data.items || []
+    buildCalendar()
+  } catch (error) {
+    console.error('Error cargando calendario de asistencias:', error)
+  }
+}
+
+const buildCalendar = () => {
+  const [year, month] = selectedMonth.value.split('-').map(Number)
+  const daysInMonth = new Date(year, month, 0).getDate()
+
+  const days = []
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+
+    days.push({
+      date: dateStr,
+      day,
+      attended: attendanceCalendarDays.value.includes(dateStr)
+    })
+  }
+
+  calendarDays.value = days
+}
+
 
 
 </script>
@@ -91,11 +179,39 @@ const formatDateTime = (value) => {
         </div>
     </div>
 
+    <div class="mb-4">
+        <h3 class="text-xl font-semibold mb-3">Calendario de asistencias</h3>
+        <div class="calendar-grid">
+            <div class="calendar-header">LU</div>
+            <div class="calendar-header">MA</div>
+            <div class="calendar-header">MI</div>
+            <div class="calendar-header">JU</div>
+            <div class="calendar-header">VI</div>
+            <div class="calendar-header">SA</div>
+            <div class="calendar-header">DO</div>
 
+            <div
+                v-for="item in calendarDays"
+                :key="item.date"
+                class="calendar-cell"
+                :class="{ attended: item.attended, empty: item.empty }"
+            >
+                <span v-if="!item.empty">{{ item.day }}</span>
+            </div>
+        </div>
+
+        
+    </div>
+
+
+
+    <h3 class="text-xl font-semibold mt-5 mb-3">Detalle de asistencias</h3>
 
     <div v-if="loading">Cargando asistencias...</div>
-
+    
+    
     <table v-else class="w-full">
+        
       <thead>
         <tr class="text-left border-b">
           <th class="py-2">Fecha</th>
@@ -130,8 +246,54 @@ const formatDateTime = (value) => {
       </tbody>
     </table>
 
+    <div v-if="hasNext" class="mt-4 text-center">
+        <button
+            @click="loadMore"
+            class="px-4 py-2 bg-primary text-white border-round"
+        >
+            Cargar más
+        </button>
+    </div>
+
+
     <div v-if="!attendances.length && !loading" class="mt-4">
       No tienes asistencias registradas aún.
     </div>
   </div>
 </template>
+
+
+<style scoped>
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.calendar-header {
+  text-align: center;
+  font-weight: 700;
+  color: #64748b;
+  padding: 0.5rem 0;
+}
+
+.calendar-cell {
+  min-height: 48px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.calendar-cell.attended {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.calendar-cell.empty {
+  background: transparent;
+}
+</style>
